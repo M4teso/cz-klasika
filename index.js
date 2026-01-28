@@ -3,8 +3,8 @@ const cheerio = require('cheerio');
 
 const manifest = {
     id: 'org.cz.auto.uzi',
-    version: '1.0.3', // Zvedám verzi
-    name: 'UZI Debugger',
+    version: '1.0.4', // Zvedáme verzi
+    name: 'UZI Debugger Fix',
     description: 'Diagnostika hledání',
     resources: ['stream'],
     types: ['movie'],
@@ -21,15 +21,20 @@ async function getMovieName(imdbId) {
 }
 
 module.exports = async (req, res) => {
+    // CORS hlavičky jsou nutné pro Stremio
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Access-Control-Allow-Headers', '*');
 
+    // 1. MANIFEST (Instalace)
     if (req.url === '/manifest.json') {
+        res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify(manifest));
         return;
     }
 
+    // 2. STREAM (Hledání)
     if (req.url.indexOf('/stream/') > -1) {
+        res.setHeader('Content-Type', 'application/json');
         try {
             const parts = req.url.split('/');
             const id = parts[parts.length - 1].replace('.json', '');
@@ -40,7 +45,7 @@ module.exports = async (req, res) => {
             // URL pro hledání
             const searchUrl = `https://uzi.si/hladaj/${encodeURIComponent(movieName)}`;
             
-            // Stáhneme HTML (tváříme se jako Chrome)
+            // Stáhneme HTML
             const resp = await needle('get', searchUrl, { 
                 follow_max: 5,
                 headers: { 
@@ -51,11 +56,10 @@ module.exports = async (req, res) => {
 
             const $ = cheerio.load(resp.body);
 
-            // DIAGNOSTIKA: Co jsme vlastně stáhli?
-            const pageTitle = $('title').text().trim(); // Nadpis stránky
-            const bodyText = $('body').text().replace(/\s+/g, ' ').substring(0, 60); // Prvních 60 znaků textu
+            // DIAGNOSTIKA
+            const pageTitle = $('title').text().trim(); 
+            const bodyText = $('body').text().replace(/\s+/g, ' ').substring(0, 100); 
 
-            // Hledáme odkazy znovu (agresivněji)
             let foundLink = null;
             let foundTitle = "";
 
@@ -63,7 +67,6 @@ module.exports = async (req, res) => {
                 const link = $(elem).attr('href');
                 const title = $(elem).text().trim();
                 
-                // Hledáme, jestli text odkazu obsahuje část názvu filmu (stačí 4 znaky shody)
                 if (link && title && title.toLowerCase().includes(movieName.toLowerCase().substring(0, 4))) {
                     if (link.includes('hladaj') || link.includes('login')) return;
                     foundLink = link;
@@ -81,10 +84,10 @@ module.exports = async (req, res) => {
                     behaviorHints: { notWebReady: true }
                 }]}));
             } else {
-                // TOTO JE TO DŮLEŽITÉ - VYPÍŠEME CHYBU DO STREMIA
+                // Vypisujeme chybu do seznamu zdrojů
                 res.end(JSON.stringify({ streams: [{
-                    title: `❌ CHYBA: ${pageTitle}`, // Zde uvidíme nadpis stránky
-                    description: `Obsah: ${bodyText}...`, // Zde uvidíme kousek textu
+                    title: `❌ CHYBA: ${pageTitle}`, 
+                    description: `Obsah stránky: ${bodyText}...`,
                     url: "http://google.com"
                 }]}));
             }
@@ -98,6 +101,22 @@ module.exports = async (req, res) => {
         return;
     }
 
-    res.setHeader('Content-Type', 'text/html');
-    res.end('<h1>Debugger v1.0.3</h1><a href="/manifest.json">Instalovat</a>');
+    // 3. HLAVNÍ STRÁNKA (HTML) - Tady byla chyba v odkazu
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    
+    // Zde generujeme správný "stremio://" odkaz
+    const installUrl = `stremio://${req.headers.host}/manifest.json`;
+
+    res.end(`
+        <div style="font-family: sans-serif; text-align: center; padding-top: 50px;">
+            <h1>Debugger v1.0.4</h1>
+            <p>Klikněte na tlačítko níže pro instalaci.</p>
+            <br>
+            <a href="${installUrl}" 
+               style="background: #27ae60; color: white; padding: 20px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 20px;">
+               NAINSTALOVAT DO STREMIA
+            </a>
+            <p style="margin-top: 20px; color: #7f8c8d;">(Pokud se nic nestane, nemáte nainstalované Stremio)</p>
+        </div>
+    `);
 };
