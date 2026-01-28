@@ -1,9 +1,9 @@
 const needle = require('needle');
-const cheerio = require('cheerio'); // Knihovna na čtení HTML
+const cheerio = require('cheerio');
 
 const manifest = {
     id: 'org.cz.auto.uzi',
-    version: '1.0.1',
+    version: '1.0.2',
     name: 'UZI Auto-Search',
     description: 'Automatické hledání na uzi.si',
     resources: ['stream'],
@@ -19,99 +19,112 @@ async function getMovieName(imdbId) {
         if (resp.body && resp.body.meta && resp.body.meta.name) {
             return resp.body.meta.name;
         }
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error("Chyba Cinemeta:", e); }
     return null;
 }
 
 module.exports = async (req, res) => {
+    // 1. Nastavíme CORS (aby Stremio mohlo číst data)
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', '*');
-    res.setHeader('Content-Type', 'application/json');
 
+    // 2. Obsluha Manifestu (Instalace)
     if (req.url === '/manifest.json') {
+        res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify(manifest));
         return;
     }
 
+    // 3. Obsluha Streamu (Hledání videa)
     if (req.url.indexOf('/stream/') > -1) {
-        const parts = req.url.split('/');
-        const id = parts[parts.length - 1].replace('.json', ''); 
-
-        // 1. Získáme název (např. "Matrix")
-        const movieName = await getMovieName(id);
-        if (!movieName) { res.end(JSON.stringify({ streams: [] })); return; }
-
-        console.log(`Hledám: ${movieName}`);
-
+        res.setHeader('Content-Type', 'application/json');
+        
         try {
-            // 2. Jdeme hledat na UZI.si
+            const parts = req.url.split('/');
+            const id = parts[parts.length - 1].replace('.json', ''); 
+
+            // A) Získáme název filmu
+            const movieName = await getMovieName(id);
+            if (!movieName) { 
+                res.end(JSON.stringify({ streams: [] })); 
+                return; 
+            }
+
+            console.log(`Hledám film: ${movieName}`);
+
+            // B) Jdeme hledat na UZI.si
+            // Použijeme URL, kterou jste mi poslal: https://uzi.si/hladaj/matrix
             const searchUrl = `https://uzi.si/hladaj/${encodeURIComponent(movieName)}`;
             
-            // Stáhneme HTML stránky s výsledky
-            const resp = await needle('get', searchUrl, { follow_max: 5 });
+            // Stáhneme HTML stránky
+            const resp = await needle('get', searchUrl, { 
+                follow_max: 5,
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } // Tváříme se jako PC
+            });
+            
             const $ = cheerio.load(resp.body);
 
-            // 3. HLEDÁNÍ ODKAZU V HTML (TOTO JE KRITICKÁ ČÁST)
-            // Musíme najít první odkaz <a>, který vypadá jako výsledek filmu.
-            // Zkouším obecný odhad: Hledáme odkaz, který obsahuje v URL slovo 'film' nebo 'video'
-            // NEBO: Hledáme první odkaz v nějakém seznamu.
-            
-            // TIP PRO VÁS: Zde musíme trefit "CSS Selektor".
-            // Zkouším najít jakýkoliv odkaz, který má v atributu 'href' něco smysluplného.
-            
+            // C) HLEDÁNÍ ODKAZU V HTML
             let foundLink = null;
             let foundTitle = "";
 
-            // Procházíme všechny odkazy na stránce
+            // Prohledáme všechny odkazy na stránce
             $('a').each((i, elem) => {
                 const link = $(elem).attr('href');
                 const title = $(elem).text().trim();
 
-                // Jednoduchá logika: Pokud text odkazu obsahuje název filmu (Matrix)
-                // a odkaz není prázdný, asi jsme to našli.
-                if (link && title.toLowerCase().includes(movieName.toLowerCase())) {
-                    // Ignorujeme odkazy na 'hladaj' nebo 'login'
-                    if (link.includes('hladaj') || link.includes('login')) return;
+                // Pokud titulek odkazu obsahuje název filmu a není to balast
+                if (link && title && title.toLowerCase().includes(movieName.toLowerCase())) {
+                    // Ignorujeme odkazy, které nevedou na film (např. stránkování, login)
+                    if (link.includes('hladaj') || link.includes('login') || link.includes('register')) return;
                     
                     foundLink = link;
                     foundTitle = title;
-                    return false; // Stop hledání po prvním nálezu
+                    return false; // Stop hledání (našli jsme první shodu)
                 }
             });
 
+            // D) Výsledek
             if (foundLink) {
-                // Pokud je odkaz relativní (např. /film/matrix), přidáme doménu
-                if (!foundLink.startsWith('http')) {
+                // Oprava relativního odkazu (pokud začíná lomítkem)
+                if (foundLink.startsWith('/')) {
                     foundLink = 'https://uzi.si' + foundLink;
                 }
 
-                // 4. Vrátíme výsledek
-                // POZOR: Zatím vracíme odkaz na STRÁNKU, ne na VIDEO.
-                // Stremio to nepřehraje (ukáže chybu), ale uvidíte titulek "Nalezeno!"
+                // Zatím vracíme odkaz na stránku jako "důkaz", že jsme to našli
                 const streams = [{
                     url: foundLink, 
-                    title: `✅ Nalezeno: ${foundTitle}`,
-                    description: "Kliknutím otevřete (zatím jen web)",
+                    title: `✅ Nalezeno na UZI: ${foundTitle}`,
                     behaviorHints: { notWebReady: true }
                 }];
                 
                 res.end(JSON.stringify({ streams: streams }));
-                return;
             } else {
-                // Nic jsme nenašli
-                 res.end(JSON.stringify({ streams: [{
+                // Nenalezeno - vrátíme prázdno (nebo informaci o chybě)
+                console.log("Nenalezen žádný odkaz odpovídající názvu.");
+                res.end(JSON.stringify({ streams: [{
                     title: "❌ Nenalezeno na UZI",
-                    url: "http://google.com" // Falešný link
+                    url: "http://google.com"
                 }] }));
-                return;
             }
 
         } catch (e) {
-            console.error("Chyba scrapingu:", e);
+            console.error("Chyba při hledání:", e);
             res.end(JSON.stringify({ streams: [] }));
-            return;
         }
+        return;
     }
 
-    res.end('Addon bezi');
+    // 4. Hlavní stránka (Instalace) - Tady byla ta chyba, teď posíláme HTML
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.end(`
+        <div style="font-family:sans-serif; text-align:center; padding:50px;">
+            <h1>UZI Auto-Search v1.0.2</h1>
+            <p>Addon běží správně.</p>
+            <a href="stremio://${req.headers.host}/manifest.json" 
+               style="background:green; color:white; padding:15px; text-decoration:none; border-radius:5px;">
+               NAINSTALOVAT DO STREMIA
+            </a>
+        </div>
+    `);
 };
