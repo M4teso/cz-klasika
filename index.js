@@ -1,63 +1,53 @@
 const { addonBuilder } = require('stremio-addon-sdk');
 
 const manifest = {
-    id: 'org.cz.beauty',
-    version: '5.0.0', // Jubilejní verze
-    name: 'Krásy Česka',
-    description: 'Vlaky, Příroda a Města (Wikimedia Commons)',
+    id: 'org.cz.google.test', 
+    version: '6.0.0', // Velký skok verze
+    name: 'Google Source Test',
+    description: 'Pouze zdroje z Google CDN (MP4)',
     resources: ['catalog', 'meta', 'stream'],
     types: ['movie'], 
     catalogs: [
         {
             type: 'movie',
-            id: 'cz_beauty_catalog',
-            name: 'Krásy Česka (Video)'
+            id: 'google_catalog',
+            name: 'Google Test Movies'
         }
     ],
-    idPrefixes: ['czvid_']
+    idPrefixes: ['goog_']
 };
 
 const VIDEOS = [
     {
-        id: 'czvid_tram',
+        id: 'goog_bunny',
         type: 'movie',
-        name: 'Praha: Jízda Tramvají',
-        poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d3/T3R.P_ev._%C4%8D._8526_na_lince_15.jpg/640px-T3R.P_ev._%C4%8D._8526_na_lince_15.jpg',
-        description: 'Pohled na jízdu tramvají T3 v Praze. (Zdroj: Wikimedia Commons)',
-        // Přímý soubor WebM (Stremio ho přehraje)
-        url: 'https://upload.wikimedia.org/wikipedia/commons/e/ea/Praha%2C_S%C3%ADdli%C5%A1t%C4%9B_Mod%C5%99any_-_Levsk%C3%A9ho%2C_j%C3%ADzda_tramvaj%C3%AD.webm'
-    },
-    {
-        id: 'czvid_train',
-        type: 'movie',
-        name: 'Vlak: Trať 010 (Cabview)',
-        poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/471.026_Praha-Kl%C3%A1novice.jpg/640px-471.026_Praha-Kl%C3%A1novice.jpg',
-        description: 'Pohled z kabiny strojvedoucího. Úsek Kolín - Praha.',
-        // Video vlaku
-        url: 'https://upload.wikimedia.org/wikipedia/commons/b/b3/Pr%C5%AFjezd_zast%C3%A1vkou_Osek_nad_Be%C4%8Dvou.webm' 
-    },
-    {
-        id: 'czvid_vltava',
-        type: 'movie',
-        name: 'Řeka Vltava (Příroda)',
-        poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a6/Vltava_in_Prague.jpg/640px-Vltava_in_Prague.jpg',
-        description: 'Klidný tok řeky Vltavy.',
-        url: 'https://upload.wikimedia.org/wikipedia/commons/c/c2/Vltava_river.webm'
-    },
-    {
-        id: 'czvid_bunny',
-        type: 'movie',
-        name: 'Kontrola: Big Buck Bunny',
+        name: 'Big Buck Bunny',
         poster: 'https://upload.wikimedia.org/wikipedia/commons/c/c5/Big_buck_bunny_poster_big.jpg',
-        description: 'Starý známý králík. Jistota, že Stremio funguje.',
+        description: 'Tohle vám minule fungovalo. Musí to jet i teď.',
         url: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
+    },
+    {
+        id: 'goog_steel',
+        type: 'movie',
+        name: 'Tears of Steel',
+        poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Tears_of_Steel_poster.jpg/450px-Tears_of_Steel_poster.jpg',
+        description: 'Sci-fi film. Stejný server jako Králík.',
+        url: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4'
+    },
+    {
+        id: 'goog_sintel',
+        type: 'movie',
+        name: 'Sintel',
+        poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/Sintel_poster.jpg/450px-Sintel_poster.jpg',
+        description: 'Animovaný film. Stejný server jako Králík.',
+        url: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4'
     }
 ];
 
 const builder = new addonBuilder(manifest);
 
 builder.defineCatalogHandler(({ type, id }) => {
-    if (id === 'cz_beauty_catalog') {
+    if (id === 'google_catalog') {
         const metas = VIDEOS.map(item => ({
             id: item.id, type: item.type, name: item.name, poster: item.poster, description: item.description
         }));
@@ -78,10 +68,10 @@ builder.defineStreamHandler(({ type, id }) => {
             streams: [
                 {
                     url: item.url,
-                    title: "▶️ Přehrát Video",
+                    title: "▶️ Přehrát (Google CDN)",
                     behaviorHints: {
-                        notWebReady: false, 
-                        bingeGroup: "tv"
+                        notWebReady: true, // Vynutí desktop player (fungovalo minule)
+                        bingeGroup: "movie"
                     }
                 }
             ]
@@ -101,10 +91,10 @@ module.exports = function (req, res) {
         res.end(`
             <html>
                 <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-                    <h1>Krásy Česka v5.0</h1>
-                    <p>Statické video soubory (100% funkční).</p>
+                    <h1>Google Test v6.0</h1>
+                    <p>Návrat k funkčnímu řešení.</p>
                     <a href="stremio://${req.headers.host}/manifest.json" 
-                       style="background: #8e44ad; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px;">
+                       style="background: #d35400; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px;">
                        NAINSTALOVAT
                     </a>
                 </body>
