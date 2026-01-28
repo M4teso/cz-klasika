@@ -1,58 +1,74 @@
 const { addonBuilder } = require('stremio-addon-sdk');
 
 const manifest = {
-    id: 'org.cz.relax.pexels',
-    version: '2.0.0', // Nová verze, nové zdroje
-    name: 'Relax Pexels (HD)',
-    description: 'Relaxační videa z profesionálních serverů',
+    id: 'org.cz.google.cinema',
+    version: '3.0.0',
+    name: 'Google Cinema (Funkční)',
+    description: 'Filmy a scenérie z Google serveru',
     resources: ['catalog', 'meta', 'stream'],
     types: ['movie'], 
     catalogs: [
         {
             type: 'movie',
-            id: 'relax_pexels',
-            name: '🍃 Relax HD (Pexels)'
+            id: 'google_catalog',
+            name: 'Google Videa (100% OK)'
         }
     ],
-    idPrefixes: ['pex_']
+    idPrefixes: ['goog_']
 };
 
 const VIDEOS = [
-    // 1. KRB (Pexels - MP4)
+    // --- FILMY (Animované / Sci-Fi) ---
     {
-        id: 'pex_fire',
+        id: 'goog_sintel',
         type: 'movie',
-        name: '🔥 Krb (Pexels HD)',
-        poster: 'https://images.pexels.com/videos/6466763/fire-fireplace-flame-home-6466763.jpg?auto=compress&cs=tinysrgb&h=750&w=1260',
-        description: 'Praskající oheň v krbu. (Zdroj: Pexels)',
-        // Přímý link na MP4 (1920x1080)
-        url: 'https://videos.pexels.com/video-files/6466763/6466763-hd_1920_1080_25fps.mp4'
+        name: 'Sintel (Drak)',
+        poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/Sintel_poster.jpg/450px-Sintel_poster.jpg',
+        description: 'Dojemný příběh o dívce a drakovi. (Animovaný)',
+        url: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4'
     },
-    // 2. OCEÁN (Pexels - MP4)
     {
-        id: 'pex_ocean',
+        id: 'goog_steel',
         type: 'movie',
-        name: '🌊 Oceán a Pláž',
-        poster: 'https://images.pexels.com/videos/855018/free-video-855018.jpg?auto=compress&cs=tinysrgb&h=750&w=1260',
-        description: 'Vlny narážející na pláž při západu slunce.',
-        url: 'https://videos.pexels.com/video-files/855018/855018-hd_1920_1080_30fps.mp4'
+        name: 'Tears of Steel',
+        poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Tears_of_Steel_poster.jpg/450px-Tears_of_Steel_poster.jpg',
+        description: 'Sci-fi akční film s roboty v Amsterdamu.',
+        url: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4'
     },
-    // 3. LES A VODA (Pexels - MP4)
     {
-        id: 'pex_forest',
+        id: 'goog_elephant',
         type: 'movie',
-        name: '🌲 Lesní Potok',
-        poster: 'https://images.pexels.com/videos/5736841/pexels-photo-5736841.jpeg?auto=compress&cs=tinysrgb&h=750&w=1260',
-        description: 'Klidný potok v lese. Zelená příroda.',
-        url: 'https://videos.pexels.com/video-files/5736841/5736841-hd_1920_1080_24fps.mp4'
+        name: 'Elephants Dream',
+        poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Elephants_Dream_poster.jpg/450px-Elephants_Dream_poster.jpg',
+        description: 'První "Open Movie" film. Surrealistický příběh o stroji.',
+        url: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4'
     },
-    // 4. KONTROLA (Google - Králík)
+
+    // --- RELAX / SCENÉRIE (Záběry z Google Chromecastu) ---
     {
-        id: 'pex_bunny',
+        id: 'goog_joyrides',
         type: 'movie',
-        name: '🐰 Kontrola: Králík',
+        name: 'Relax: Joyrides (Vesmír/Příroda)',
+        poster: 'https://img.youtube.com/vi/1X9-1X9-1X9/maxresdefault.jpg', // Placeholder
+        description: 'Krásné záběry z vesmíru a přírody. (Původně demo pro Chromecast).',
+        url: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4'
+    },
+    {
+        id: 'goog_escapes',
+        type: 'movie',
+        name: 'Relax: Escapes (Příroda)',
+        poster: 'https://img.youtube.com/vi/2X9-2X9-2X9/maxresdefault.jpg', // Placeholder
+        description: 'Útěk do přírody. Klidné záběry krajiny.',
+        url: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4'
+    },
+    
+    // --- KLASIKA ---
+    {
+        id: 'goog_bunny',
+        type: 'movie',
+        name: 'Big Buck Bunny',
         poster: 'https://upload.wikimedia.org/wikipedia/commons/c/c5/Big_buck_bunny_poster_big.jpg',
-        description: 'Pokud nejede ani Krb, ani Oceán, ale Králík ano - Pexels u vás nefunguje.',
+        description: 'Náš starý známý králík.',
         url: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
     }
 ];
@@ -60,7 +76,7 @@ const VIDEOS = [
 const builder = new addonBuilder(manifest);
 
 builder.defineCatalogHandler(({ type, id }) => {
-    if (id === 'relax_pexels') {
+    if (id === 'google_catalog') {
         const metas = VIDEOS.map(item => ({
             id: item.id, type: item.type, name: item.name, poster: item.poster, description: item.description
         }));
@@ -81,7 +97,7 @@ builder.defineStreamHandler(({ type, id }) => {
             streams: [
                 {
                     url: item.url,
-                    title: "▶️ Přehrát (Pexels HighSpeed)",
+                    title: "▶️ Přehrát (Google Server)",
                     behaviorHints: {
                         notWebReady: true,
                         bingeGroup: "movie"
@@ -101,7 +117,7 @@ const router = getRouter(addonInterface);
 module.exports = function (req, res) {
     if (req.url === '/') {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.end(`<h1>Relax Pexels v2.0</h1><a href="stremio://${req.headers.host}/manifest.json">INSTALOVAT</a>`);
+        res.end(`<h1>Google Cinema v3.0</h1><a href="stremio://${req.headers.host}/manifest.json">NAINSTALOVAT (100% Funkční)</a>`);
         return;
     }
     router(req, res, function () { res.statusCode = 404; res.end(); });
