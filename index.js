@@ -2,9 +2,9 @@ const { addonBuilder } = require('stremio-addon-sdk');
 
 const manifest = {
     id: 'org.cz.streamy',
-    version: '1.0.6',
+    version: '1.0.7',
     name: 'CZ/SK Live & Test',
-    description: 'Živé vysílání a testovací streamy (Bez YouTube)',
+    description: 'Živé vysílání a testovací streamy',
     resources: ['catalog', 'meta', 'stream'],
     types: ['tv', 'channel'], 
     catalogs: [
@@ -39,7 +39,7 @@ const CHANNELS = [
         type: 'tv',
         name: 'TEST: Big Buck Bunny',
         poster: 'https://upload.wikimedia.org/wikipedia/commons/c/c5/Big_buck_bunny_poster_big.jpg',
-        description: 'Pokud se toto přehraje, váš addon funguje správně. (Direct MP4)',
+        description: 'Pokud se toto přehraje, váš addon funguje správně.',
         streamUrl: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
     }
 ];
@@ -65,20 +65,41 @@ builder.defineStreamHandler(({ type, id }) => {
     const channel = CHANNELS.find(c => c.id === id);
     if (channel && channel.streamUrl) {
         return Promise.resolve({
-            streams: [{ url: channel.streamUrl, title: "🟢 Živé vysílání / Stream" }]
+            streams: [{ url: channel.streamUrl, title: "🟢 Přehrát Stream" }]
         });
     }
     return Promise.resolve({ streams: [] });
 });
 
-// --- ZDE JE TA OPRAVA PRO VERCEL ---
-// Načteme router přímo z SDK
+// --- VERCEL HTTP HANDLER ---
 const getRouter = require('stremio-addon-sdk/src/getRouter');
 const addonInterface = builder.getInterface();
 const router = getRouter(addonInterface);
 
-// Exportujeme funkci, kterou Vercel umí spustit
 module.exports = function (req, res) {
+    // 1. Pokud uživatel otevře hlavní stránku (/), ukážeme mu instrukce
+    if (req.url === '/') {
+        res.setHeader('Content-Type', 'text/html');
+        res.end(`
+            <html>
+                <body style="font-family: sans-serif; text-align: center; padding: 50px;">
+                    <h1>Váš Addon Běží! ✅</h1>
+                    <p>Pro instalaci do Stremia klikněte na odkaz níže, nebo zkopírujte adresu:</p>
+                    <p style="background: #eee; padding: 10px; display: inline-block;">
+                        ${req.headers.host}/manifest.json
+                    </p>
+                    <br><br>
+                    <a href="stremio://${req.headers.host}/manifest.json" 
+                       style="background: #8e44ad; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+                       Nainstalovat do Stremia
+                    </a>
+                </body>
+            </html>
+        `);
+        return;
+    }
+
+    // 2. Ostatní požadavky (manifest.json, streamy) vyřeší Stremio Router
     router(req, res, function () {
         res.statusCode = 404;
         res.end();
