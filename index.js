@@ -1,136 +1,168 @@
+const { addonBuilder } = require('stremio-addon-sdk');
 const needle = require('needle');
 const cheerio = require('cheerio');
 
 const manifest = {
-    id: 'org.cz.prehraj.probe',
-    version: '1.0.0',
-    name: 'Prehraj.to Probe',
-    description: 'Test dostupnosti a hledání na Prehraj.to',
-    resources: ['stream'],
-    types: ['movie'],
-    idPrefixes: ['tt']
+    id: 'org.cz.hokejka.vercel',
+    version: '1.0.1',
+    name: 'Hokejka TV',
+    description: 'Extraliga, Reprezentace a NHL novinky',
+    resources: ['catalog', 'meta', 'stream'],
+    types: ['tv', 'other'], 
+    catalogs: [
+        {
+            type: 'other',
+            id: 'hokejka_feed',
+            name: '🏒 Hokejka TV',
+            extra: [{ name: 'search', isRequired: false }]
+        }
+    ],
+    idPrefixes: ['hokej_']
 };
 
-// Záchranný odkaz (Stranger Things), aby byl výsledek vždy vidět
-const SAFE_URL = "https://be7713.rcr82.waw05.r66nv9ed.com/hls2/01/10370/c31ul1nrticy_x/index-v1-a1.m3u8?t=L8uKu7HWoC4QIiVoCUfjTkiazCXSlEVqJtNMA9A3RiQ&s=1769627005&e=10800&f=51854519&srv=1065&asn=57564&sp=5500&p=0";
+const builder = new addonBuilder(manifest);
 
-// Pomocná funkce pro název filmu
-async function getMovieName(imdbId) {
-    const url = `https://v3-cinemeta.strem.io/meta/movie/${imdbId}.json`;
+// 1. KATALOG (Načte seznam videí)
+builder.defineCatalogHandler(async ({ type, id }) => {
+    // Vercel logy uvidíte v dashboardu
+    console.log("Načítám katalog Hokejka TV...");
+    
     try {
-        const resp = await needle('get', url);
-        if (resp.body && resp.body.meta && resp.body.meta.name) return resp.body.meta.name;
-    } catch (e) {}
-    return "Matrix"; // Fallback
-}
-
-module.exports = async (req, res) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Headers', '*');
-    res.setHeader('Content-Type', 'application/json');
-
-    if (req.url === '/manifest.json') {
-        res.end(JSON.stringify(manifest));
-        return;
-    }
-
-    if (req.url.indexOf('/stream/') > -1) {
-        let streams = [];
-        const parts = req.url.split('/');
-        const id = parts[parts.length - 1].replace('.json', '');
-        const movieName = await getMovieName(id);
-
-        // ODKAZ 1: Info o tom, co děláme
-        streams.push({
-            title: `ℹ️ Testuji Prehraj.to pro: ${movieName}`,
-            url: SAFE_URL,
-            behaviorHints: { notWebReady: true }
-        });
-
-        try {
-            // URL pro vyhledávání na Prehraj.to
-            // Obvykle to bývá https://prehraj.to/hledej/nazev+filmu
-            const searchUrl = `https://prehraj.to/hledej/${encodeURIComponent(movieName)}`;
-            
-            console.log("Dotazuji se:", searchUrl);
-
-            const resp = await needle('get', searchUrl, {
-                open_timeout: 5000,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Referer': 'https://prehraj.to/'
-                }
-            });
-
-            // ANALÝZA ODPOVĚDI
-            if (resp.statusCode === 200) {
-                const $ = cheerio.load(resp.body);
-                const pageTitle = $('title').text().trim();
-                
-                // Kontrola Cloudflare
-                if (pageTitle.includes('Just a moment') || pageTitle.includes('Attention Required')) {
-                     streams.push({
-                        title: `⛔ BLOK: Cloudflare ochrana aktivní`,
-                        description: "Vercel se přes bránu nedostal.",
-                        url: SAFE_URL
-                    });
-                } else {
-                    // JSME UVNITŘ! Zkusíme spočítat výsledky.
-                    // Na Prehraj.to jsou výsledky často v div class="video-item" nebo odkazech
-                    let foundCount = 0;
-                    let firstLink = "";
-
-                    // Hledáme odkazy, které vypadají jako videa
-                    $('a').each((i, elem) => {
-                        const href = $(elem).attr('href');
-                        const text = $(elem).text().trim();
-                        
-                        // Hledáme typické znaky videa (avi, mp4, mkv v názvu nebo URL)
-                        // Nebo prostě jen odkazy, co nejsou menu
-                        if (href && href.length > 10 && !href.includes('prihlaseni') && !href.includes('registrace')) {
-                             // Jednoduchá heuristika: pokud text odkazu obsahuje název filmu
-                             if (text.toLowerCase().includes(movieName.toLowerCase())) {
-                                 foundCount++;
-                                 if (!firstLink) firstLink = href;
-                             }
-                        }
-                    });
-
-                    if (foundCount > 0) {
-                        streams.push({
-                            title: `✅ ÚSPĚCH: Našel jsem ${foundCount} videí!`,
-                            description: `První: ${firstLink.substring(0, 30)}...`,
-                            url: firstLink.startsWith('http') ? firstLink : 'https://prehraj.to' + firstLink,
-                            behaviorHints: { notWebReady: true }
-                        });
-                    } else {
-                        streams.push({
-                            title: `⚠️ Web běží, ale nic nenašel`,
-                            description: `Titulek stránky: ${pageTitle}`,
-                            url: searchUrl // Odkaz na výsledky hledání
-                        });
-                    }
-                }
-
-            } else {
-                streams.push({
-                    title: `⛔ CHYBA SERVERU: Kód ${resp.statusCode}`,
-                    url: SAFE_URL
-                });
-            }
-
-        } catch (e) {
-            streams.push({
-                title: `💀 KRITICKÁ CHYBA`,
-                description: e.message,
-                url: SAFE_URL
-            });
+        const url = 'https://www.hokej.cz/tv/hokejka';
+        const resp = await needle('get', url, { follow_max: 3 });
+        
+        if (resp.statusCode !== 200) {
+            console.log("Chyba načítání webu:", resp.statusCode);
+            return { metas: [] };
         }
 
-        res.end(JSON.stringify({ streams: streams }));
+        const $ = cheerio.load(resp.body);
+        let metas = [];
+
+        // Hledáme odkazy, které vypadají jako videa
+        // Selektor 'a' je obecný, ale filtrujeme podle obsahu URL
+        $('a').each((i, elem) => {
+            const link = $(elem).attr('href');
+            // Najdeme obrázek (hokej.cz používá lazy loading, takže někdy data-src)
+            const img = $(elem).find('img').attr('src') || $(elem).find('img').attr('data-src');
+            const title = $(elem).find('h3').text().trim() || $(elem).attr('title') || $(elem).text().trim();
+
+            // Filtr: Musí to být odkaz na video, mít obrázek a titulek
+            if (link && link.includes('/video/') && img && title.length > 5) {
+                
+                // Získáme ID (např. /video/12345)
+                const match = link.match(/\/video\/(\d+)/);
+                if (match) {
+                    const videoId = match[1];
+                    
+                    // Oprava URL obrázku, pokud je relativní
+                    const fullImg = img.startsWith('http') ? img : 'https://www.hokej.cz' + img;
+
+                    metas.push({
+                        id: `hokej_${videoId}`,
+                        type: 'other',
+                        name: title,
+                        poster: fullImg,
+                        description: "Sledovat na Hokejka TV"
+                    });
+                }
+            }
+        });
+
+        // Odstraníme duplicity (někdy je tam stejné video 2x)
+        const uniqueMetas = [...new Map(metas.map(item => [item['id'], item])).values()];
+        
+        return { metas: uniqueMetas };
+
+    } catch (e) {
+        console.log("Chyba katalogu:", e.message);
+        return { metas: [] };
+    }
+});
+
+// 2. META (Detail videa - jen aby to nehodilo chybu)
+builder.defineMetaHandler(async ({ type, id }) => {
+    return {
+        meta: {
+            id: id,
+            type: 'other',
+            name: "Hokej Video",
+            poster: "https://www.hokej.cz/images/logo.png",
+            description: "Načítám stream..."
+        }
+    };
+});
+
+// 3. STREAM (Získání odkazu na video)
+builder.defineStreamHandler(async ({ type, id }) => {
+    const realId = id.replace('hokej_', '');
+    const videoUrl = `https://www.hokej.cz/tv/hokejka/video/${realId}`;
+    
+    try {
+        const resp = await needle('get', videoUrl, { follow_max: 3 });
+        const html = resp.body;
+
+        // A) Hledáme .m3u8 (HLS)
+        // Regex hledá cokoliv, co začíná http, neobsahuje mezery a končí .m3u8
+        const m3u8Match = html.match(/https?:\\?\/\\?\/[^"'\s<>]+\.m3u8/);
+        
+        if (m3u8Match) {
+            // Odstraníme zpětná lomítka (pokud je to v JSONu)
+            const cleanUrl = m3u8Match[0].replace(/\\\//g, '/');
+            
+            return {
+                streams: [{
+                    title: "🏒 Přehrát Stream (HLS)",
+                    url: cleanUrl
+                }]
+            };
+        }
+
+        // B) Hledáme .mp4
+        const mp4Match = html.match(/https?:\\?\/\\?\/[^"'\s<>]+\.mp4/);
+        if (mp4Match) {
+            const cleanUrl = mp4Match[0].replace(/\\\//g, '/');
+            return {
+                streams: [{
+                    title: "🏒 Přehrát Video (MP4)",
+                    url: cleanUrl
+                }]
+            };
+        }
+
+        // C) Fallback - Otevřít web
+        return {
+            streams: [{
+                title: "🌐 Otevřít na webu",
+                url: videoUrl,
+                behaviorHints: { notWebReady: true }
+            }]
+        };
+
+    } catch (e) {
+        return { streams: [] };
+    }
+});
+
+// Vercel Router
+const getRouter = require('stremio-addon-sdk/src/getRouter');
+const addonInterface = builder.getInterface();
+const router = getRouter(addonInterface);
+
+module.exports = function (req, res) {
+    if (req.url === '/') {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.end(`
+            <div style="font-family:sans-serif; text-align:center; padding:50px;">
+                <h1>🏒 Hokejka TV v1.0</h1>
+                <p>Nyní běží na Vercelu!</p>
+                <a href="stremio://${req.headers.host}/manifest.json" 
+                   style="background:#e74c3c; color:white; padding:15px; text-decoration:none; border-radius:5px;">
+                   NAINSTALOVAT
+                </a>
+            </div>
+        `);
         return;
     }
-
-    res.setHeader('Content-Type', 'text/html');
-    res.end(`<h1>Prehraj.to Probe</h1><a href="stremio://${req.headers.host}/manifest.json">SPUSTIT</a>`);
+    router(req, res, function () { res.statusCode = 404; res.end(); });
 };

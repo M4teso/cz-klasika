@@ -1,8 +1,10 @@
 {
-  "name": "cz-scraper",
+  "name": "cz-hokejka-tv",
   "version": "1.0.0",
+  "description": "Hokejka TV pro Stremio",
   "main": "index.js",
   "dependencies": {
+    "stremio-addon-sdk": "^1.6.10",
     "needle": "^3.2.0",
     "cheerio": "^1.0.0-rc.12"
   }
