@@ -1,81 +1,111 @@
 const { addonBuilder } = require('stremio-addon-sdk');
 
 const manifest = {
-    id: 'org.cz.streamy.final',
-    version: '1.1.0',
-    name: 'HLS Test & CZ TV',
-    description: 'Test funkčnosti HLS streamů',
+    id: 'org.cz.final.test', 
+    version: '2.0.1', // ZVEDLI JSME VERZI (Stremio si všimne změny)
+    name: 'CZ/SK Free TV',
+    description: 'Živé vysílání českých a slovenských stanic',
     resources: ['catalog', 'meta', 'stream'],
-    types: ['tv'], 
-    catalogs: [{ type: 'tv', id: 'cz_live_tv', name: 'Live Stream Test' }],
-    idPrefixes: ['test_']
+    types: ['movie'], 
+    catalogs: [
+        {
+            type: 'movie',
+            id: 'cz_tv_catalog',
+            name: 'CZ/SK Televize (Live)'
+        }
+    ],
+    idPrefixes: ['cztv_']
 };
 
-const CHANNELS = [
+// --- REÁLNÉ TV KANÁLY ---
+const STREAMS = [
     {
-        id: 'test_mux',
-        type: 'tv',
-        name: 'Mux HLS Test (Big Buck Bunny)',
-        poster: 'https://image.tmdb.org/t/p/w500/uVEFQvFMMsg4e6yb03xWI5wdjv.jpg',
-        description: 'Referenční HLS stream (.m3u8) od společnosti Mux. Musí fungovat všude.',
-        // Tento stream je 100% spolehlivý
-        streamUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'
-    },
-    {
-        id: 'test_apple',
-        type: 'tv',
-        name: 'Apple BipBop (Audio/Video)',
-        poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Apple-logo.png/640px-Apple-logo.png',
-        description: 'Základní testovací stream přímo od Apple. Nízká kvalita, ale rychlý start.',
-        // HTTP (ne HTTPS), někdy to projde lépe firewallem
-        streamUrl: 'http://devimages.apple.com/iphone/samples/bipbop/bipbopall.m3u8'
-    },
-    {
-        id: 'test_ct24',
-        type: 'tv',
-        name: 'ČT24 (Pokus)',
+        id: 'cztv_ct24',
+        type: 'movie',
+        name: 'ČT24 (Zprávy)',
         poster: 'https://upload.wikimedia.org/wikipedia/commons/a/ad/Ct24_logo_new.png',
-        description: 'Pokus o živé vysílání ČT24. (Může být geo-blokováno)',
-        // Veřejný stream ČT, často se mění
-        streamUrl: 'https://ct24-lh.akamaihd.net/i/CT24_1@308332/master.m3u8'
+        description: 'Zpravodajský kanál České televize. Vysílá 24 hodin denně.',
+        // Oficiální stream ČT
+        url: 'https://ct24-lh.akamaihd.net/i/CT24_1@308332/master.m3u8'
+    },
+    {
+        id: 'cztv_ta3',
+        type: 'movie',
+        name: 'TA3 (Slovensko)',
+        poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/TA3_logo_2011.png/640px-TA3_logo_2011.png',
+        description: 'Slovenská zpravodajská televize.',
+        url: 'https://stream.mediawork.cz/ta3/ta3-hq/playlist.m3u8'
+    },
+    {
+        id: 'cztv_ocko',
+        type: 'movie',
+        name: 'Óčko Star',
+        poster: 'https://upload.wikimedia.org/wikipedia/commons/f/ff/%C3%93%C4%8Dko_Star_logo_2021.png',
+        description: 'Největší hudební hity. Videoklipy nonstop.',
+        url: 'https://stream.mediawork.cz/ocko-star/ocko-star-hq/playlist.m3u8'
+    },
+    {
+        id: 'cztv_rtvs24',
+        type: 'movie',
+        name: 'RTVS 24',
+        poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/36/RTVS_24_logo.png/600px-RTVS_24_logo.png',
+        description: 'Zpravodajský okruh slovenské veřejnoprávní televize.',
+        url: 'https://b-rtvs-live-24-hls.live1.cdn.siminn.net/rtvs_live_24_hls/live_720p/playlist.m3u8'
+    },
+    {
+        id: 'cztv_retro',
+        type: 'movie',
+        name: 'Retro Music TV',
+        poster: 'https://upload.wikimedia.org/wikipedia/en/e/e5/Retro_Music_Television_logo.png',
+        description: 'Hudební pecky z minulých dekád.',
+        url: 'https://stream.mediawork.cz/retrotv/retrotv-hq/playlist.m3u8'
     }
 ];
 
 const builder = new addonBuilder(manifest);
 
+// 1. Katalog
 builder.defineCatalogHandler(({ type, id }) => {
-    if (id === 'cz_live_tv') {
-        const metas = CHANNELS.map(ch => ({
-            id: ch.id, type: ch.type, name: ch.name, poster: ch.poster, description: ch.description
+    if (id === 'cz_tv_catalog') {
+        const metas = STREAMS.map(item => ({
+            id: item.id,
+            type: item.type,
+            name: item.name,
+            poster: item.poster,
+            description: item.description
         }));
         return Promise.resolve({ metas });
     }
     return Promise.resolve({ metas: [] });
 });
 
+// 2. Detail
 builder.defineMetaHandler(({ type, id }) => {
-    const item = CHANNELS.find(c => c.id === id);
-    return Promise.resolve({ meta: item || {} });
+    const item = STREAMS.find(i => i.id === id);
+    return Promise.resolve({ meta: item || null });
 });
 
+// 3. Stream
 builder.defineStreamHandler(({ type, id }) => {
-    const channel = CHANNELS.find(c => c.id === id);
-    if (channel && channel.streamUrl) {
+    const item = STREAMS.find(i => i.id === id);
+    if (item && item.url) {
         return Promise.resolve({
-            streams: [{ 
-                url: channel.streamUrl, 
-                title: "▶️ Spustit Stream",
-                behaviorHints: {
-                    notWebReady: true, // Důležité pro Windows
-                    bingeGroup: "tv"
+            streams: [
+                {
+                    url: item.url,
+                    title: "▶️ Sledovat Živě (Live Stream)",
+                    behaviorHints: {
+                        notWebReady: true,
+                        bingeGroup: "tv"
+                    }
                 }
-            }]
+            ]
         });
     }
     return Promise.resolve({ streams: [] });
 });
 
-// ROUTER PRO VERCEL
+// Router
 const getRouter = require('stremio-addon-sdk/src/getRouter');
 const addonInterface = builder.getInterface();
 const router = getRouter(addonInterface);
@@ -83,7 +113,7 @@ const router = getRouter(addonInterface);
 module.exports = function (req, res) {
     if (req.url === '/') {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.end(`<h1>Addon Update 1.1.0 OK ✅</h1><a href="stremio://${req.headers.host}/manifest.json">Instalovat</a>`);
+        res.end(`<h1>CZ/SK TV v2.0.1</h1><p>Aktualizováno.</p><a href="stremio://${req.headers.host}/manifest.json">Instalovat</a>`);
         return;
     }
     router(req, res, function () { res.statusCode = 404; res.end(); });
