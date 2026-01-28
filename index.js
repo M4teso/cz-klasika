@@ -1,68 +1,65 @@
 const { addonBuilder } = require('stremio-addon-sdk');
 
 const manifest = {
-    id: 'org.cz.radio.film', 
-    version: '3.0.0', // Velký skok verze pro čistou instalaci
-    name: 'CZ Rádio & Archiv',
-    description: 'Česká rádia a filmy z veřejného archivu',
+    id: 'org.cz.skicams',
+    version: '1.0.0',
+    name: 'CZ Ski Cams',
+    description: 'Živé kamery z českých hor (YouTube)',
     resources: ['catalog', 'meta', 'stream'],
     types: ['movie'], 
     catalogs: [
         {
             type: 'movie',
-            id: 'cz_radio_catalog',
-            name: 'CZ Rádio a Klasika'
+            id: 'ski_catalog',
+            name: '⛄ Sjezdovky & Hory'
         }
     ],
-    idPrefixes: ['czmix_']
+    idPrefixes: ['ski_']
 };
 
-const STREAMS = [
-    // 1. RÁDIOŽURNÁL (Audio MP3)
+// --- DATABÁZE KAMER (Zde doplňujte YouTube ID) ---
+const CAMS = [
     {
-        id: 'czmix_radiozurnal',
+        id: 'ski_spindl_svpetr',
         type: 'movie',
-        name: '📻 ČRo Radiožurnál',
-        poster: 'https://upload.wikimedia.org/wikipedia/commons/2/23/%C4%8CRo_Radio%C5%BEurn%C3%A1l_logo.png',
-        description: 'Živé vysílání Českého rozhlasu. Zprávy a publicistika. (Audio)',
-        // Oficiální HTTPS stream - velmi stabilní
-        url: 'https://icecast.rozhlas.cz/radiozurnal-128.mp3'
+        name: 'Špindlerův Mlýn - Sv. Petr',
+        poster: 'https://www.skiareal.cz/images/content/webkamery/svaty-petr-plne.jpg',
+        description: 'Panoramatická kamera Svatý Petr. (Zdroj: YouTube)',
+        // YouTube ID videa (to za v=)
+        ytId: 'FfS1aL1qFj8' 
     },
-    // 2. EVROPA 2 (Audio MP3)
     {
-        id: 'czmix_evropa2',
+        id: 'ski_lipno',
         type: 'movie',
-        name: '📻 Evropa 2',
-        poster: 'https://upload.wikimedia.org/wikipedia/commons/0/02/Evropa_2_logo_2015.png',
-        description: 'MaXXimum muziky. Nejposlouchanější rádio pro mladé.',
-        url: 'https://icecast.axis.cz/evropa2-128.mp3'
+        name: 'Skiareál Lipno',
+        poster: 'https://www.lipno.info/images/zima/sjezdovky-lipno.jpg',
+        description: 'Živý pohled na Skiareál Lipno.',
+        ytId: 'K_uJg2qYhMo'
     },
-    // 3. KRAKATIT (Film MP4)
     {
-        id: 'czmix_krakatit',
+        id: 'ski_pustevny',
         type: 'movie',
-        name: '🎥 Krakatit (1948)',
-        poster: 'https://upload.wikimedia.org/wikipedia/commons/e/ee/Krakatit.jpg',
-        description: 'Filmová adaptace románu Karla Čapka. Režie: Otakar Vávra. (Zdroj: Archive.org)',
-        // Přímý odkaz na soubor z Archive.org (nikdy neexspiruje)
-        url: 'https://archive.org/download/Krakatit/Krakatit.mp4'
+        name: 'Pustevny - Stezka',
+        poster: 'https://www.pustevny.cz/wp-content/uploads/2018/12/stezka-v-oblacich-zima.jpg',
+        description: 'Stezka Valaška a okolí.',
+        ytId: '7Q3Z8Z8Z8Z8' // Placeholder, nahraďte aktuálním, pokud tento nejede
     },
-    // 4. MUX TEST (Kontrola)
     {
-        id: 'czmix_mux',
+        id: 'ski_test',
         type: 'movie',
-        name: '🔧 TEST: Big Buck Bunny',
-        poster: 'https://image.tmdb.org/t/p/w500/uVEFQvFMMsg4e6yb03xWI5wdjv.jpg',
-        description: 'Kontrolní video.',
-        url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'
+        name: 'TEST: Big Buck Bunny',
+        poster: 'https://upload.wikimedia.org/wikipedia/commons/c/c5/Big_buck_bunny_poster_big.jpg',
+        description: 'Kontrolní video (MP4), kdyby YouTube zlobilo.',
+        // Direct MP4 (funguje vždy)
+        url: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
     }
 ];
 
 const builder = new addonBuilder(manifest);
 
 builder.defineCatalogHandler(({ type, id }) => {
-    if (id === 'cz_radio_catalog') {
-        const metas = STREAMS.map(item => ({
+    if (id === 'ski_catalog') {
+        const metas = CAMS.map(item => ({
             id: item.id, type: item.type, name: item.name, poster: item.poster, description: item.description
         }));
         return Promise.resolve({ metas });
@@ -71,30 +68,42 @@ builder.defineCatalogHandler(({ type, id }) => {
 });
 
 builder.defineMetaHandler(({ type, id }) => {
-    const item = STREAMS.find(i => i.id === id);
+    const item = CAMS.find(i => i.id === id);
     return Promise.resolve({ meta: item || null });
 });
 
 builder.defineStreamHandler(({ type, id }) => {
-    const item = STREAMS.find(i => i.id === id);
+    const item = CAMS.find(i => i.id === id);
+    
+    // 1. Pokud je to YouTube Stream
+    if (item && item.ytId) {
+        return Promise.resolve({
+            streams: [
+                {
+                    ytId: item.ytId,
+                    title: "🔴 Živý přenos (YouTube)",
+                }
+            ]
+        });
+    }
+
+    // 2. Pokud je to přímý soubor (Králík)
     if (item && item.url) {
         return Promise.resolve({
             streams: [
                 {
                     url: item.url,
-                    title: "▶️ Přehrát (Direct Stream)",
-                    behaviorHints: {
-                        notWebReady: true,
-                        bingeGroup: "tv"
-                    }
+                    title: "▶️ Přehrát soubor",
+                    behaviorHints: { notWebReady: true, bingeGroup: "tv" }
                 }
             ]
         });
     }
+
     return Promise.resolve({ streams: [] });
 });
 
-// ROUTER
+// Router
 const getRouter = require('stremio-addon-sdk/src/getRouter');
 const addonInterface = builder.getInterface();
 const router = getRouter(addonInterface);
@@ -105,11 +114,11 @@ module.exports = function (req, res) {
         res.end(`
             <html>
                 <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-                    <h1>CZ Rádio & Archiv v3.0</h1>
-                    <p>Audio streamy a Public Domain filmy.</p>
+                    <h1>❄️ CZ Ski Cams ❄️</h1>
+                    <p>Sjezdovky ve vašem obýváku.</p>
                     <a href="stremio://${req.headers.host}/manifest.json" 
-                       style="background: #e67e22; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
-                       INSTALOVAT VERZI 3.0
+                       style="background: #3498db; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px;">
+                       NAINSTALOVAT
                     </a>
                 </body>
             </html>
