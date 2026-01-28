@@ -1,30 +1,30 @@
 const needle = require('needle');
+const cheerio = require('cheerio');
 
 const manifest = {
-    id: 'org.cz.site.scanner.v2',
-    version: '2.0.0',
-    name: 'Site Scanner (Visible)',
-    description: 'Test dostupnosti webů',
+    id: 'org.cz.najfilmy.bot',
+    version: '1.0.0',
+    name: 'Najfilmy Auto',
+    description: 'Automatické hledání na Najfilmy.com',
     resources: ['stream'],
     types: ['movie'],
     idPrefixes: ['tt']
 };
 
-// Váš funkční odkaz (Stranger Things) - ten zajistí viditelnost
-const SAFE_URL = "https://be7713.rcr82.waw05.r66nv9ed.com/hls2/01/10370/c31ul1nrticy_x/index-v1-a1.m3u8?t=L8uKu7HWoC4QIiVoCUfjTkiazCXSlEVqJtNMA9A3RiQ&s=1769627005&e=10800&f=51854519&srv=1065&asn=57564&sp=5500&p=0";
+// Hlavičky, abychom vypadali jako prohlížeč Chrome
+const HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Referer': 'https://najfilmy.com/'
+};
 
-// Seznam webů k testování
-const SITES = [
-    { name: '🟢 KONTROLA: Archive.org', url: 'https://archive.org/' }, // Musí být zelené
-    { name: 'Uzi.si', url: 'https://uzi.si/' },
-    { name: 'SledujSerialy.io', url: 'https://sledujserialy.io/' },
-    { name: 'Bombuj.si', url: 'https://bombuj.si/' },
-    { name: 'Kukaj.io', url: 'https://kukaj.io/' },
-    { name: 'Prehraj.to', url: 'https://prehraj.to/' },
-    { name: 'FilmPlanet.to', url: 'https://filmplanet.to/' },
-    { name: 'NajFilmy.com', url: 'https://najfilmy.com/' },
-    { name: 'SledujFilmy.to', url: 'https://sledujfilmy.to/' }
-];
+async function getMovieName(imdbId) {
+    const url = `https://v3-cinemeta.strem.io/meta/movie/${imdbId}.json`;
+    try {
+        const resp = await needle('get', url);
+        if (resp.body && resp.body.meta && resp.body.meta.name) return resp.body.meta.name;
+    } catch (e) {}
+    return null;
+}
 
 module.exports = async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -37,61 +37,103 @@ module.exports = async (req, res) => {
     }
 
     if (req.url.indexOf('/stream/') > -1) {
+        let streams = [];
         
-        // Spustíme testy paralelně
-        const promises = SITES.map(async (site) => {
-            // Unikátní odkaz pro každý řádek (aby to Stremio nesloučilo)
-            // Přidáváme &site=JMÉNO na konec URL
-            const rowUrl = `${SAFE_URL}&debug_site=${encodeURIComponent(site.name)}`;
+        try {
+            const parts = req.url.split('/');
+            const id = parts[parts.length - 1].replace('.json', '');
+            const movieName = await getMovieName(id);
 
-            try {
-                const resp = await needle('get', site.url, {
-                    open_timeout: 4000, // 4 sekundy timeout
-                    follow_max: 2,
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            if (!movieName) {
+                res.end(JSON.stringify({ streams: [] }));
+                return;
+            }
+
+            // 1. FÁZE: HLEDÁNÍ FILMU
+            // Najfilmy používá standardní hledání: ?s=nazev
+            const searchUrl = `https://najfilmy.com/?s=${encodeURIComponent(movieName)}`;
+            
+            const searchResp = await needle('get', searchUrl, { headers: HEADERS, follow_max: 2 });
+            const $ = cheerio.load(searchResp.body);
+
+            let moviePageUrl = null;
+            let foundTitle = "";
+
+            // Procházíme výsledky. Najfilmy mají výsledky obvykle v elementech <article> nebo podobně.
+            // Zkusíme najít první odkaz, který v titulku obsahuje název filmu.
+            $('a').each((i, elem) => {
+                const link = $(elem).attr('href');
+                const title = $(elem).text().trim(); // Nebo $(elem).attr('title')
+
+                // Hledáme shodu jména (alespoň část) a ignorujeme odkazy na kategorie/stránkování
+                if (link && title && title.toLowerCase().includes(movieName.toLowerCase())) {
+                    if (link.length < 15) return; // Příliš krátký odkaz je podezřelý
+                    
+                    moviePageUrl = link;
+                    foundTitle = title;
+                    return false; // Stop, máme první výsledek (většinou ten nejlepší)
+                }
+            });
+
+            if (moviePageUrl) {
+                // 2. FÁZE: VYTĚŽENÍ VIDEA
+                // Jdeme na stránku filmu
+                const movieResp = await needle('get', moviePageUrl, { headers: HEADERS, follow_max: 2 });
+                const $$ = cheerio.load(movieResp.body);
+
+                // Hledáme IFRAME (vložené video)
+                // Najfilmy často používají přehrávače jako Mixdrop, Streamtape, Supervideo...
+                let videoUrl = null;
+                let videoSource = "Web";
+
+                $$('iframe').each((i, elem) => {
+                    const src = $$(elem).attr('src');
+                    if (src && src.startsWith('http')) {
+                        // Ignorujeme reklamy a Facebook widgety
+                        if (src.includes('facebook') || src.includes('google')) return;
+                        
+                        videoUrl = src;
+                        if (src.includes('mixdrop')) videoSource = "Mixdrop";
+                        if (src.includes('streamtape')) videoSource = "Streamtape";
+                        if (src.includes('youtube')) videoSource = "Trailer";
+                        return false; // Bereme první iframe
                     }
                 });
 
-                if (resp.statusCode >= 200 && resp.statusCode < 400) {
-                    // ZELENÁ: Web je otevřený!
-                    return {
-                        title: `✅ OTEVŘENO: ${site.name}`,
-                        url: rowUrl,
-                        behaviorHints: { notWebReady: true }
-                    };
-                } else {
-                    // ČERVENÁ: Web nás blokuje (403/503)
-                    return {
-                        title: `⛔ BLOK (${resp.statusCode}): ${site.name}`,
-                        url: rowUrl,
-                        behaviorHints: { notWebReady: true }
-                    };
-                }
-            } catch (e) {
-                // ŠEDÁ: Chyba spojení
-                return {
-                    title: `💀 ERROR: ${site.name}`,
-                    description: e.message,
-                    url: rowUrl,
-                    behaviorHints: { notWebReady: true }
-                };
+                if (videoUrl) {
+                    // MÁME PŘÍMÝ ODKAZ NA PŘEHRÁVAČ!
+                    streams.push({
+                        title: `✅ ${videoSource}: ${foundTitle}`,
+                        url: videoUrl, // Stremio se pokusí otevřít tento iframe
+                        behaviorHints: { notWebReady: true } // Vynutíme desktop player
+                    });
+                } 
+
+                // Vždy přidáme i odkaz na samotnou stránku (jako zálohu)
+                streams.push({
+                    title: `🌐 Otevřít web: ${foundTitle}`,
+                    description: "Pokud video nehraje, klikni zde a otevře se prohlížeč.",
+                    url: moviePageUrl
+                });
+
+            } else {
+                streams.push({
+                    title: `❌ Nenalezeno na Najfilmy: ${movieName}`,
+                    url: "http://google.com"
+                });
             }
-        });
 
-        const results = await Promise.all(promises);
-        
-        // Seřadíme: Zelené nahoru
-        results.sort((a, b) => {
-            if (a.title.includes('✅')) return -1;
-            if (b.title.includes('✅')) return 1;
-            return 0;
-        });
+        } catch (e) {
+            streams.push({
+                title: `💀 Chyba robota: ${e.message}`,
+                url: "http://google.com"
+            });
+        }
 
-        res.end(JSON.stringify({ streams: results }));
+        res.end(JSON.stringify({ streams: streams }));
         return;
     }
 
     res.setHeader('Content-Type', 'text/html');
-    res.end(`<h1>Scanner v2.0</h1><a href="stremio://${req.headers.host}/manifest.json">SPUSTIT</a>`);
+    res.end(`<h1>Najfilmy Bot v1.0</h1><a href="stremio://${req.headers.host}/manifest.json">NAINSTALOVAT</a>`);
 };
