@@ -53,4 +53,40 @@ const builder = new addonBuilder(manifest);
 builder.defineCatalogHandler(({ type, id }) => {
     if (id === 'cz_live_tv') {
         const metas = CHANNELS.map(ch => ({
-            id:
+            id: ch.id,
+            type: ch.type,
+            name: ch.name,
+            poster: ch.poster,
+            description: ch.description
+        }));
+        return Promise.resolve({ metas });
+    }
+    return Promise.resolve({ metas: [] });
+});
+
+// 2. Detail
+builder.defineMetaHandler(({ type, id }) => {
+    const item = CHANNELS.find(c => c.id === id);
+    return Promise.resolve({ meta: item || {} });
+});
+
+// 3. Stream (ZDE JE ZMĚNA)
+builder.defineStreamHandler(({ type, id }) => {
+    const channel = CHANNELS.find(c => c.id === id);
+    
+    if (channel && channel.streamUrl) {
+        return Promise.resolve({
+            streams: [
+                {
+                    // Místo ytId posíláme URL. 
+                    // Stremio pozná koncovku .m3u8 nebo .mp4 a spustí vlastní přehrávač.
+                    url: channel.streamUrl, 
+                    title: "🟢 Živé vysílání / Stream (Direct)",
+                }
+            ]
+        });
+    }
+    return Promise.resolve({ streams: [] });
+});
+
+module.exports = builder.getInterface();
