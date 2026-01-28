@@ -1,8 +1,8 @@
-const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
+const { addonBuilder } = require('stremio-addon-sdk');
 
 const manifest = {
     id: 'org.cz.streamy',
-    version: '1.0.5',
+    version: '1.0.6',
     name: 'CZ/SK Live & Test',
     description: 'Živé vysílání a testovací streamy (Bez YouTube)',
     resources: ['catalog', 'meta', 'stream'],
@@ -17,7 +17,6 @@ const manifest = {
     idPrefixes: ['cz_live_']
 };
 
-// --- Naše databáze streamů ---
 const CHANNELS = [
     {
         id: 'cz_live_ocko',
@@ -25,7 +24,6 @@ const CHANNELS = [
         name: 'Óčko Star',
         poster: 'https://upload.wikimedia.org/wikipedia/commons/f/ff/%C3%93%C4%8Dko_Star_logo_2021.png',
         description: 'Největší hity od 80. let po současnost. Živé vysílání.',
-        // HLS stream (m3u8) - Stremio ho umí přehrát nativně
         streamUrl: 'https://stream.mediawork.cz/ocko-star/ocko-star-hq/playlist.m3u8'
     },
     {
@@ -42,51 +40,47 @@ const CHANNELS = [
         name: 'TEST: Big Buck Bunny',
         poster: 'https://upload.wikimedia.org/wikipedia/commons/c/c5/Big_buck_bunny_poster_big.jpg',
         description: 'Pokud se toto přehraje, váš addon funguje správně. (Direct MP4)',
-        // Přímý odkaz na MP4 soubor
         streamUrl: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
     }
 ];
 
 const builder = new addonBuilder(manifest);
 
-// 1. Katalog
 builder.defineCatalogHandler(({ type, id }) => {
     if (id === 'cz_live_tv') {
         const metas = CHANNELS.map(ch => ({
-            id: ch.id,
-            type: ch.type,
-            name: ch.name,
-            poster: ch.poster,
-            description: ch.description
+            id: ch.id, type: ch.type, name: ch.name, poster: ch.poster, description: ch.description
         }));
         return Promise.resolve({ metas });
     }
     return Promise.resolve({ metas: [] });
 });
 
-// 2. Detail
 builder.defineMetaHandler(({ type, id }) => {
     const item = CHANNELS.find(c => c.id === id);
     return Promise.resolve({ meta: item || {} });
 });
 
-// 3. Stream (ZDE JE ZMĚNA)
 builder.defineStreamHandler(({ type, id }) => {
     const channel = CHANNELS.find(c => c.id === id);
-    
     if (channel && channel.streamUrl) {
         return Promise.resolve({
-            streams: [
-                {
-                    // Místo ytId posíláme URL. 
-                    // Stremio pozná koncovku .m3u8 nebo .mp4 a spustí vlastní přehrávač.
-                    url: channel.streamUrl, 
-                    title: "🟢 Živé vysílání / Stream (Direct)",
-                }
-            ]
+            streams: [{ url: channel.streamUrl, title: "🟢 Živé vysílání / Stream" }]
         });
     }
     return Promise.resolve({ streams: [] });
 });
 
-module.exports = builder.getInterface();
+// --- ZDE JE TA OPRAVA PRO VERCEL ---
+// Načteme router přímo z SDK
+const getRouter = require('stremio-addon-sdk/src/getRouter');
+const addonInterface = builder.getInterface();
+const router = getRouter(addonInterface);
+
+// Exportujeme funkci, kterou Vercel umí spustit
+module.exports = function (req, res) {
+    router(req, res, function () {
+        res.statusCode = 404;
+        res.end();
+    });
+};
