@@ -1,59 +1,69 @@
 const { addonBuilder } = require('stremio-addon-sdk');
 
 const manifest = {
-    id: 'org.cz.final.fixed', 
-    version: '2.0.4', 
-    name: 'CZ TV (Stabilní)',
-    description: 'Praha TV, TV Noe a Test',
+    id: 'org.cz.radio.film', 
+    version: '3.0.0', // Velký skok verze pro čistou instalaci
+    name: 'CZ Rádio & Archiv',
+    description: 'Česká rádia a filmy z veřejného archivu',
     resources: ['catalog', 'meta', 'stream'],
     types: ['movie'], 
     catalogs: [
         {
             type: 'movie',
-            id: 'cz_tv_catalog',
-            name: 'CZ Televize & Test'
+            id: 'cz_radio_catalog',
+            name: 'CZ Rádio a Klasika'
         }
     ],
-    idPrefixes: ['cztv_']
+    idPrefixes: ['czmix_']
 };
 
 const STREAMS = [
+    // 1. RÁDIOŽURNÁL (Audio MP3)
     {
-        id: 'cztv_mux',
+        id: 'czmix_radiozurnal',
         type: 'movie',
-        name: 'TEST: Mux (Big Buck Bunny)',
+        name: '📻 ČRo Radiožurnál',
+        poster: 'https://upload.wikimedia.org/wikipedia/commons/2/23/%C4%8CRo_Radio%C5%BEurn%C3%A1l_logo.png',
+        description: 'Živé vysílání Českého rozhlasu. Zprávy a publicistika. (Audio)',
+        // Oficiální HTTPS stream - velmi stabilní
+        url: 'https://icecast.rozhlas.cz/radiozurnal-128.mp3'
+    },
+    // 2. EVROPA 2 (Audio MP3)
+    {
+        id: 'czmix_evropa2',
+        type: 'movie',
+        name: '📻 Evropa 2',
+        poster: 'https://upload.wikimedia.org/wikipedia/commons/0/02/Evropa_2_logo_2015.png',
+        description: 'MaXXimum muziky. Nejposlouchanější rádio pro mladé.',
+        url: 'https://icecast.axis.cz/evropa2-128.mp3'
+    },
+    // 3. KRAKATIT (Film MP4)
+    {
+        id: 'czmix_krakatit',
+        type: 'movie',
+        name: '🎥 Krakatit (1948)',
+        poster: 'https://upload.wikimedia.org/wikipedia/commons/e/ee/Krakatit.jpg',
+        description: 'Filmová adaptace románu Karla Čapka. Režie: Otakar Vávra. (Zdroj: Archive.org)',
+        // Přímý odkaz na soubor z Archive.org (nikdy neexspiruje)
+        url: 'https://archive.org/download/Krakatit/Krakatit.mp4'
+    },
+    // 4. MUX TEST (Kontrola)
+    {
+        id: 'czmix_mux',
+        type: 'movie',
+        name: '🔧 TEST: Big Buck Bunny',
         poster: 'https://image.tmdb.org/t/p/w500/uVEFQvFMMsg4e6yb03xWI5wdjv.jpg',
-        description: 'Testovací stream. Pokud toto funguje, addon je v pořádku.',
+        description: 'Kontrolní video.',
         url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'
-    },
-    {
-        id: 'cztv_praha',
-        type: 'movie',
-        name: 'Praha TV',
-        poster: 'https://upload.wikimedia.org/wikipedia/commons/3/36/Praha_TV_logo.png',
-        description: 'Regionální zpravodajství z Prahy. Živě.',
-        url: 'https://b-prahatv-live-hls.live1.cdn.siminn.net/prahatv_live_hls/live_720p/playlist.m3u8'
-    },
-    {
-        id: 'cztv_noe',
-        type: 'movie',
-        name: 'TV NOE',
-        poster: 'https://upload.wikimedia.org/wikipedia/commons/e/e4/Tv_noe_logo.jpg',
-        description: 'Televize dobrých zpráv.',
-        url: 'http://stream.poda.cz/tv-noe/playlist.m3u8'
     }
 ];
 
 const builder = new addonBuilder(manifest);
 
 builder.defineCatalogHandler(({ type, id }) => {
-    if (id === 'cz_tv_catalog') {
+    if (id === 'cz_radio_catalog') {
         const metas = STREAMS.map(item => ({
-            id: item.id,
-            type: item.type,
-            name: item.name,
-            poster: item.poster,
-            description: item.description
+            id: item.id, type: item.type, name: item.name, poster: item.poster, description: item.description
         }));
         return Promise.resolve({ metas });
     }
@@ -72,7 +82,7 @@ builder.defineStreamHandler(({ type, id }) => {
             streams: [
                 {
                     url: item.url,
-                    title: "▶️ Přehrát Stream",
+                    title: "▶️ Přehrát (Direct Stream)",
                     behaviorHints: {
                         notWebReady: true,
                         bingeGroup: "tv"
@@ -84,7 +94,7 @@ builder.defineStreamHandler(({ type, id }) => {
     return Promise.resolve({ streams: [] });
 });
 
-// ROUTER PRO VERCEL
+// ROUTER
 const getRouter = require('stremio-addon-sdk/src/getRouter');
 const addonInterface = builder.getInterface();
 const router = getRouter(addonInterface);
@@ -95,11 +105,11 @@ module.exports = function (req, res) {
         res.end(`
             <html>
                 <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-                    <h1>CZ TV v2.0.4 OK ✅</h1>
-                    <p>Chyba 500 opravena.</p>
+                    <h1>CZ Rádio & Archiv v3.0</h1>
+                    <p>Audio streamy a Public Domain filmy.</p>
                     <a href="stremio://${req.headers.host}/manifest.json" 
-                       style="background: #27ae60; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
-                       AKTUALIZOVAT ADDON
+                       style="background: #e67e22; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+                       INSTALOVAT VERZI 3.0
                     </a>
                 </body>
             </html>
