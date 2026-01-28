@@ -1,82 +1,70 @@
 const { addonBuilder } = require('stremio-addon-sdk');
 
 const manifest = {
-    id: 'org.cz.google.cinema',
-    version: '3.0.0',
-    name: 'Google Cinema (Funkční)',
-    description: 'Filmy a scenérie z Google serveru',
+    id: 'org.cz.nasa.docs',
+    version: '4.0.0', // Nová verze
+    name: 'Vesmírné Dokumenty',
+    description: 'Dokumenty a 4K záběry z NASA (High Speed)',
     resources: ['catalog', 'meta', 'stream'],
     types: ['movie'], 
     catalogs: [
         {
             type: 'movie',
-            id: 'google_catalog',
-            name: 'Google Videa (100% OK)'
+            id: 'nasa_docs',
+            name: 'Vesmír & Věda'
         }
     ],
-    idPrefixes: ['goog_']
+    idPrefixes: ['nasa_']
 };
 
 const VIDEOS = [
-    // --- FILMY (Animované / Sci-Fi) ---
     {
-        id: 'goog_sintel',
+        id: 'nasa_sun',
         type: 'movie',
-        name: 'Sintel (Drak)',
-        poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/Sintel_poster.jpg/450px-Sintel_poster.jpg',
-        description: 'Dojemný příběh o dívce a drakovi. (Animovaný)',
-        url: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4'
+        name: '☀️ Thermonuclear Art (Slunce 4K)',
+        poster: 'https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e001435/GSFC_20171208_Archive_e001435~orig.jpg',
+        description: '30 minut dechberoucích záběrů Slunce ve 4K rozlišení. Relaxační hudba. (Top kvalita)',
+        // Oficiální NASA server (velmi rychlý)
+        url: 'https://images-assets.nasa.gov/video/GSFC_20151101_SDO_4k/GSFC_20151101_SDO_4k~orig.mp4'
     },
     {
-        id: 'goog_steel',
+        id: 'nasa_apollo11',
         type: 'movie',
-        name: 'Tears of Steel',
-        poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Tears_of_Steel_poster.jpg/450px-Tears_of_Steel_poster.jpg',
-        description: 'Sci-fi akční film s roboty v Amsterdamu.',
-        url: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4'
+        name: '🚀 Apollo 11: Highlights',
+        poster: 'https://images-assets.nasa.gov/image/as11-40-5903/as11-40-5903~orig.jpg',
+        description: 'Původní restaurované záběry z přistání na Měsíci v roce 1969.',
+        url: 'https://images-assets.nasa.gov/video/Apollo%2011%20Overview/Apollo%2011%20Overview~orig.mp4'
     },
     {
-        id: 'goog_elephant',
+        id: 'nasa_moon',
         type: 'movie',
-        name: 'Elephants Dream',
-        poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Elephants_Dream_poster.jpg/450px-Elephants_Dream_poster.jpg',
-        description: 'První "Open Movie" film. Surrealistický příběh o stroji.',
-        url: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4'
-    },
-
-    // --- RELAX / SCENÉRIE (Záběry z Google Chromecastu) ---
-    {
-        id: 'goog_joyrides',
-        type: 'movie',
-        name: 'Relax: Joyrides (Vesmír/Příroda)',
-        poster: 'https://img.youtube.com/vi/1X9-1X9-1X9/maxresdefault.jpg', // Placeholder
-        description: 'Krásné záběry z vesmíru a přírody. (Původně demo pro Chromecast).',
-        url: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4'
+        name: '🌑 Tour of the Moon (4K)',
+        poster: 'https://images-assets.nasa.gov/image/PIA13517/PIA13517~orig.jpg',
+        description: 'Detailní prohlídka povrchu Měsíce z dat sondy LRO.',
+        url: 'https://images-assets.nasa.gov/video/LRO_Tour_of_the_Moon_4k/LRO_Tour_of_the_Moon_4k~orig.mp4'
     },
     {
-        id: 'goog_escapes',
+        id: 'nasa_blackhole',
         type: 'movie',
-        name: 'Relax: Escapes (Příroda)',
-        poster: 'https://img.youtube.com/vi/2X9-2X9-2X9/maxresdefault.jpg', // Placeholder
-        description: 'Útěk do přírody. Klidné záběry krajiny.',
-        url: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4'
+        name: '🕳️ Simulace Černé díry',
+        poster: 'https://images-assets.nasa.gov/image/PIA23408/PIA23408~orig.jpg',
+        description: 'Vizualizace černé díry a jejího akrečního disku.',
+        url: 'https://images-assets.nasa.gov/video/Black_Hole_Accretion_Disk_Sim_1080p60/Black_Hole_Accretion_Disk_Sim_1080p60~orig.mp4'
     },
-    
-    // --- KLASIKA ---
     {
-        id: 'goog_bunny',
+        id: 'nasa_aurora',
         type: 'movie',
-        name: 'Big Buck Bunny',
-        poster: 'https://upload.wikimedia.org/wikipedia/commons/c/c5/Big_buck_bunny_poster_big.jpg',
-        description: 'Náš starý známý králík.',
-        url: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
+        name: '🌌 Polární záře (Timelapse)',
+        poster: 'https://images-assets.nasa.gov/image/iss052e007937/iss052e007937~orig.jpg',
+        description: 'Polární záře z pohledu Mezinárodní vesmírné stanice (ISS).',
+        url: 'https://images-assets.nasa.gov/video/UHD_Aurora_Timelapse/UHD_Aurora_Timelapse~orig.mp4'
     }
 ];
 
 const builder = new addonBuilder(manifest);
 
 builder.defineCatalogHandler(({ type, id }) => {
-    if (id === 'google_catalog') {
+    if (id === 'nasa_docs') {
         const metas = VIDEOS.map(item => ({
             id: item.id, type: item.type, name: item.name, poster: item.poster, description: item.description
         }));
@@ -97,7 +85,7 @@ builder.defineStreamHandler(({ type, id }) => {
             streams: [
                 {
                     url: item.url,
-                    title: "▶️ Přehrát (Google Server)",
+                    title: "▶️ Přehrát (NASA Server)",
                     behaviorHints: {
                         notWebReady: true,
                         bingeGroup: "movie"
@@ -117,7 +105,7 @@ const router = getRouter(addonInterface);
 module.exports = function (req, res) {
     if (req.url === '/') {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.end(`<h1>Google Cinema v3.0</h1><a href="stremio://${req.headers.host}/manifest.json">NAINSTALOVAT (100% Funkční)</a>`);
+        res.end(`<h1>Vesmírné Dokumenty v4.0</h1><a href="stremio://${req.headers.host}/manifest.json">NAINSTALOVAT</a>`);
         return;
     }
     router(req, res, function () { res.statusCode = 404; res.end(); });
