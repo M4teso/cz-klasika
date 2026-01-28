@@ -1,49 +1,43 @@
 const { addonBuilder } = require('stremio-addon-sdk');
 
 const manifest = {
-    id: 'org.cz.streamy.fix',
-    version: '1.0.9',
-    name: 'CZ/SK Live & Test (Fixed)',
-    description: 'Test živých streamů a kódování',
+    id: 'org.cz.streamy.final',
+    version: '1.1.0',
+    name: 'HLS Test & CZ TV',
+    description: 'Test funkčnosti HLS streamů',
     resources: ['catalog', 'meta', 'stream'],
-    types: ['tv', 'channel'], 
-    catalogs: [
-        {
-            type: 'tv',
-            id: 'cz_live_tv',
-            name: 'Živé Vysílání (Test)'
-        }
-    ],
-    idPrefixes: ['cz_live_']
+    types: ['tv'], 
+    catalogs: [{ type: 'tv', id: 'cz_live_tv', name: 'Live Stream Test' }],
+    idPrefixes: ['test_']
 };
 
-// --- OPRAVENÁ DATABÁZE ---
 const CHANNELS = [
     {
-        id: 'cz_live_nasa',
+        id: 'test_mux',
         type: 'tv',
-        name: 'NASA TV (Live)',
-        // Používáme stabilní obrázek z IMDB/Githubu, ne z Wikipedie
-        poster: 'https://raw.githubusercontent.com/Stremio/stremio-logo/master/examples/nasa_logo.png',
-        description: 'Živý přenos z NASA. Test HLS formátu (m3u8).',
-        // Oficiální a stabilní NASA stream
-        streamUrl: 'https://ntv1.akamaized.net/hls/live/2013975/NASA-NTV1-HLS/master.m3u8'
+        name: 'Mux HLS Test (Big Buck Bunny)',
+        poster: 'https://image.tmdb.org/t/p/w500/uVEFQvFMMsg4e6yb03xWI5wdjv.jpg',
+        description: 'Referenční HLS stream (.m3u8) od společnosti Mux. Musí fungovat všude.',
+        // Tento stream je 100% spolehlivý
+        streamUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'
     },
     {
-        id: 'cz_live_bunny',
+        id: 'test_apple',
         type: 'tv',
-        name: 'Big Buck Bunny (MP4)',
-        poster: 'https://upload.wikimedia.org/wikipedia/commons/c/c5/Big_buck_bunny_poster_big.jpg',
-        description: 'Klasický testovací soubor (formát MP4).',
-        streamUrl: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
+        name: 'Apple BipBop (Audio/Video)',
+        poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Apple-logo.png/640px-Apple-logo.png',
+        description: 'Základní testovací stream přímo od Apple. Nízká kvalita, ale rychlý start.',
+        // HTTP (ne HTTPS), někdy to projde lépe firewallem
+        streamUrl: 'http://devimages.apple.com/iphone/samples/bipbop/bipbopall.m3u8'
     },
     {
-        id: 'cz_live_hls_test',
+        id: 'test_ct24',
         type: 'tv',
-        name: 'Akamai HLS Test',
-        poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/JavaScript-logo.png/600px-JavaScript-logo.png',
-        description: 'Technický test pro ověření, že Stremio umí přehrát .m3u8 stream.',
-        streamUrl: 'https://moctobpltc-i.akamaihd.net/hls/live/571329/eight/master.m3u8' 
+        name: 'ČT24 (Pokus)',
+        poster: 'https://upload.wikimedia.org/wikipedia/commons/a/ad/Ct24_logo_new.png',
+        description: 'Pokus o živé vysílání ČT24. (Může být geo-blokováno)',
+        // Veřejný stream ČT, často se mění
+        streamUrl: 'https://ct24-lh.akamaihd.net/i/CT24_1@308332/master.m3u8'
     }
 ];
 
@@ -70,44 +64,27 @@ builder.defineStreamHandler(({ type, id }) => {
         return Promise.resolve({
             streams: [{ 
                 url: channel.streamUrl, 
-                title: "🟢 Spustit Stream" 
+                title: "▶️ Spustit Stream",
+                behaviorHints: {
+                    notWebReady: true, // Důležité pro Windows
+                    bingeGroup: "tv"
+                }
             }]
         });
     }
     return Promise.resolve({ streams: [] });
 });
 
-// --- ROUTER S OPRAVENOU ČEŠTINOU ---
+// ROUTER PRO VERCEL
 const getRouter = require('stremio-addon-sdk/src/getRouter');
 const addonInterface = builder.getInterface();
 const router = getRouter(addonInterface);
 
 module.exports = function (req, res) {
     if (req.url === '/') {
-        // TADY JE OPRAVA: Přidáno charset=utf-8
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.end(`
-            <html>
-                <head>
-                    <meta charset="utf-8"> 
-                    <title>Můj Stremio Addon</title>
-                </head>
-                <body style="font-family: sans-serif; text-align: center; padding: 50px; background-color: #f0f0f0;">
-                    <h1>Váš Addon Běží! ✅</h1>
-                    <p>Čeština už by měla být v pořádku: ěščřžýáíé.</p>
-                    <p>Pro instalaci klikněte níže:</p>
-                    <a href="stremio://${req.headers.host}/manifest.json" 
-                       style="background: #8e44ad; color: white; padding: 15px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                       NAINSTALOVAT DO STREMIA
-                    </a>
-                </body>
-            </html>
-        `);
+        res.end(`<h1>Addon Update 1.1.0 OK ✅</h1><a href="stremio://${req.headers.host}/manifest.json">Instalovat</a>`);
         return;
     }
-
-    router(req, res, function () {
-        res.statusCode = 404;
-        res.end();
-    });
+    router(req, res, function () { res.statusCode = 404; res.end(); });
 };
