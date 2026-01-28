@@ -1,64 +1,70 @@
 const { addonBuilder } = require('stremio-addon-sdk');
 
 const manifest = {
-    id: 'org.cz.skicams',
-    version: '1.0.0',
-    name: 'CZ Ski Cams',
-    description: 'Živé kamery z českých hor (YouTube)',
+    id: 'org.czsk.mountains',
+    version: '1.0.1', // Nová verze
+    name: 'CZ/SK Hory Live',
+    description: 'Živé kamery z hor (Direct HLS)',
     resources: ['catalog', 'meta', 'stream'],
     types: ['movie'], 
     catalogs: [
         {
             type: 'movie',
-            id: 'ski_catalog',
-            name: '⛄ Sjezdovky & Hory'
+            id: 'mountains_catalog',
+            name: '🏔️ Hory a Sjezdovky'
         }
     ],
-    idPrefixes: ['ski_']
+    idPrefixes: ['cam_']
 };
 
-// --- DATABÁZE KAMER (Zde doplňujte YouTube ID) ---
 const CAMS = [
     {
-        id: 'ski_spindl_svpetr',
+        id: 'cam_lomnicak',
         type: 'movie',
-        name: 'Špindlerův Mlýn - Sv. Petr',
-        poster: 'https://www.skiareal.cz/images/content/webkamery/svaty-petr-plne.jpg',
-        description: 'Panoramatická kamera Svatý Petr. (Zdroj: YouTube)',
-        // YouTube ID videa (to za v=)
-        ytId: 'FfS1aL1qFj8' 
+        name: 'Lomnický štít (2634 m)',
+        poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Lomnicky_stit_z_Kehmarskeho.jpg/600px-Lomnicky_stit_z_Kehmarskeho.jpg',
+        description: 'Vysoké Tatry. Úžasný výhled z druhé nejvyšší hory Slovenska. (Live Stream)',
+        // Přímý stream Feratel - velmi stabilní
+        url: 'https://streams.feratel.co/stream/1/webtv/t13l.m3u8'
     },
     {
-        id: 'ski_lipno',
+        id: 'cam_strbske',
         type: 'movie',
-        name: 'Skiareál Lipno',
-        poster: 'https://www.lipno.info/images/zima/sjezdovky-lipno.jpg',
-        description: 'Živý pohled na Skiareál Lipno.',
-        ytId: 'K_uJg2qYhMo'
+        name: 'Štrbské Pleso (Sjezdovka)',
+        poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d4/%C5%A0trbsk%C3%A9_pleso_1.jpg/640px-%C5%A0trbsk%C3%A9_pleso_1.jpg',
+        description: 'Pohled na areál běžeckého lyžování a sjezdovky.',
+        url: 'https://streams.feratel.co/stream/1/webtv/t06l.m3u8'
     },
     {
-        id: 'ski_pustevny',
+        id: 'cam_bachledka',
         type: 'movie',
-        name: 'Pustevny - Stezka',
-        poster: 'https://www.pustevny.cz/wp-content/uploads/2018/12/stezka-v-oblacich-zima.jpg',
-        description: 'Stezka Valaška a okolí.',
-        ytId: '7Q3Z8Z8Z8Z8' // Placeholder, nahraďte aktuálním, pokud tento nejede
+        name: 'Bachledka (Stezka)',
+        poster: 'https://chodnikkorunamistromov.sk/wp-content/uploads/2019/10/DJI_0109-min.jpg',
+        description: 'Bachledova dolina - Stezka korunami stromů.',
+        url: 'https://streams.feratel.co/stream/1/webtv/t23l.m3u8'
     },
     {
-        id: 'ski_test',
+        id: 'cam_martinky',
         type: 'movie',
-        name: 'TEST: Big Buck Bunny',
-        poster: 'https://upload.wikimedia.org/wikipedia/commons/c/c5/Big_buck_bunny_poster_big.jpg',
-        description: 'Kontrolní video (MP4), kdyby YouTube zlobilo.',
-        // Direct MP4 (funguje vždy)
-        url: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
+        name: 'Martinské hole',
+        poster: 'https://upload.wikimedia.org/wikipedia/commons/e/ea/Martinsk%C3%A9_hole%2C_vysiela%C4%8D_K%C3%A9%C5%BE.jpg',
+        description: 'Winter Park Martinky. Pohled na sjezdovku.',
+        url: 'https://streams.feratel.co/stream/1/webtv/t11l.m3u8'
+    },
+    {
+        id: 'cam_kubinska',
+        type: 'movie',
+        name: 'Kubínska hoľa',
+        poster: 'https://upload.wikimedia.org/wikipedia/commons/7/75/Kub%C3%ADnska_ho%C4%BEa_-_panoramio_%281%29.jpg',
+        description: 'Jeden z nejpopulárnějších lyžařských areálů na Oravě.',
+        url: 'https://streams.feratel.co/stream/1/webtv/t16l.m3u8'
     }
 ];
 
 const builder = new addonBuilder(manifest);
 
 builder.defineCatalogHandler(({ type, id }) => {
-    if (id === 'ski_catalog') {
+    if (id === 'mountains_catalog') {
         const metas = CAMS.map(item => ({
             id: item.id, type: item.type, name: item.name, poster: item.poster, description: item.description
         }));
@@ -74,32 +80,20 @@ builder.defineMetaHandler(({ type, id }) => {
 
 builder.defineStreamHandler(({ type, id }) => {
     const item = CAMS.find(i => i.id === id);
-    
-    // 1. Pokud je to YouTube Stream
-    if (item && item.ytId) {
-        return Promise.resolve({
-            streams: [
-                {
-                    ytId: item.ytId,
-                    title: "🔴 Živý přenos (YouTube)",
-                }
-            ]
-        });
-    }
-
-    // 2. Pokud je to přímý soubor (Králík)
     if (item && item.url) {
         return Promise.resolve({
             streams: [
                 {
                     url: item.url,
-                    title: "▶️ Přehrát soubor",
-                    behaviorHints: { notWebReady: true, bingeGroup: "tv" }
+                    title: "⛰️ Sledovat Live (HLS)",
+                    behaviorHints: {
+                        notWebReady: true, // Klíčové pro Windows
+                        bingeGroup: "tv"
+                    }
                 }
             ]
         });
     }
-
     return Promise.resolve({ streams: [] });
 });
 
@@ -114,10 +108,10 @@ module.exports = function (req, res) {
         res.end(`
             <html>
                 <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-                    <h1>❄️ CZ Ski Cams ❄️</h1>
-                    <p>Sjezdovky ve vašem obýváku.</p>
+                    <h1>🏔️ CZ/SK Hory Live</h1>
+                    <p>Webkamery z Tater a sjezdovek (Direct HLS).</p>
                     <a href="stremio://${req.headers.host}/manifest.json" 
-                       style="background: #3498db; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px;">
+                       style="background: #2ecc71; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
                        NAINSTALOVAT
                     </a>
                 </body>
