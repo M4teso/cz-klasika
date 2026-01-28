@@ -1,9 +1,5 @@
 {
-  "name": "cz-klasika",
+  "name": "cz-manual-stream",
   "version": "1.0.0",
-  "description": "Stremio Addon",
-  "main": "index.js",
-  "dependencies": {
-    "stremio-addon-sdk": "^1.6.10"
-  }
+  "main": "index.js"
 }
