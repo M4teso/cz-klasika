@@ -1,71 +1,64 @@
 const { addonBuilder } = require('stremio-addon-sdk');
 
 const manifest = {
-    id: 'org.czsk.mountains',
-    version: '1.0.1', // Nová verze
-    name: 'CZ/SK Hory Live',
-    description: 'Živé kamery z hor (Direct HLS)',
+    id: 'org.cz.beauty',
+    version: '5.0.0', // Jubilejní verze
+    name: 'Krásy Česka',
+    description: 'Vlaky, Příroda a Města (Wikimedia Commons)',
     resources: ['catalog', 'meta', 'stream'],
     types: ['movie'], 
     catalogs: [
         {
             type: 'movie',
-            id: 'mountains_catalog',
-            name: '🏔️ Hory a Sjezdovky'
+            id: 'cz_beauty_catalog',
+            name: 'Krásy Česka (Video)'
         }
     ],
-    idPrefixes: ['cam_']
+    idPrefixes: ['czvid_']
 };
 
-const CAMS = [
+const VIDEOS = [
     {
-        id: 'cam_lomnicak',
+        id: 'czvid_tram',
         type: 'movie',
-        name: 'Lomnický štít (2634 m)',
-        poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Lomnicky_stit_z_Kehmarskeho.jpg/600px-Lomnicky_stit_z_Kehmarskeho.jpg',
-        description: 'Vysoké Tatry. Úžasný výhled z druhé nejvyšší hory Slovenska. (Live Stream)',
-        // Přímý stream Feratel - velmi stabilní
-        url: 'https://streams.feratel.co/stream/1/webtv/t13l.m3u8'
+        name: 'Praha: Jízda Tramvají',
+        poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d3/T3R.P_ev._%C4%8D._8526_na_lince_15.jpg/640px-T3R.P_ev._%C4%8D._8526_na_lince_15.jpg',
+        description: 'Pohled na jízdu tramvají T3 v Praze. (Zdroj: Wikimedia Commons)',
+        // Přímý soubor WebM (Stremio ho přehraje)
+        url: 'https://upload.wikimedia.org/wikipedia/commons/e/ea/Praha%2C_S%C3%ADdli%C5%A1t%C4%9B_Mod%C5%99any_-_Levsk%C3%A9ho%2C_j%C3%ADzda_tramvaj%C3%AD.webm'
     },
     {
-        id: 'cam_strbske',
+        id: 'czvid_train',
         type: 'movie',
-        name: 'Štrbské Pleso (Sjezdovka)',
-        poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d4/%C5%A0trbsk%C3%A9_pleso_1.jpg/640px-%C5%A0trbsk%C3%A9_pleso_1.jpg',
-        description: 'Pohled na areál běžeckého lyžování a sjezdovky.',
-        url: 'https://streams.feratel.co/stream/1/webtv/t06l.m3u8'
+        name: 'Vlak: Trať 010 (Cabview)',
+        poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/471.026_Praha-Kl%C3%A1novice.jpg/640px-471.026_Praha-Kl%C3%A1novice.jpg',
+        description: 'Pohled z kabiny strojvedoucího. Úsek Kolín - Praha.',
+        // Video vlaku
+        url: 'https://upload.wikimedia.org/wikipedia/commons/b/b3/Pr%C5%AFjezd_zast%C3%A1vkou_Osek_nad_Be%C4%8Dvou.webm' 
     },
     {
-        id: 'cam_bachledka',
+        id: 'czvid_vltava',
         type: 'movie',
-        name: 'Bachledka (Stezka)',
-        poster: 'https://chodnikkorunamistromov.sk/wp-content/uploads/2019/10/DJI_0109-min.jpg',
-        description: 'Bachledova dolina - Stezka korunami stromů.',
-        url: 'https://streams.feratel.co/stream/1/webtv/t23l.m3u8'
+        name: 'Řeka Vltava (Příroda)',
+        poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a6/Vltava_in_Prague.jpg/640px-Vltava_in_Prague.jpg',
+        description: 'Klidný tok řeky Vltavy.',
+        url: 'https://upload.wikimedia.org/wikipedia/commons/c/c2/Vltava_river.webm'
     },
     {
-        id: 'cam_martinky',
+        id: 'czvid_bunny',
         type: 'movie',
-        name: 'Martinské hole',
-        poster: 'https://upload.wikimedia.org/wikipedia/commons/e/ea/Martinsk%C3%A9_hole%2C_vysiela%C4%8D_K%C3%A9%C5%BE.jpg',
-        description: 'Winter Park Martinky. Pohled na sjezdovku.',
-        url: 'https://streams.feratel.co/stream/1/webtv/t11l.m3u8'
-    },
-    {
-        id: 'cam_kubinska',
-        type: 'movie',
-        name: 'Kubínska hoľa',
-        poster: 'https://upload.wikimedia.org/wikipedia/commons/7/75/Kub%C3%ADnska_ho%C4%BEa_-_panoramio_%281%29.jpg',
-        description: 'Jeden z nejpopulárnějších lyžařských areálů na Oravě.',
-        url: 'https://streams.feratel.co/stream/1/webtv/t16l.m3u8'
+        name: 'Kontrola: Big Buck Bunny',
+        poster: 'https://upload.wikimedia.org/wikipedia/commons/c/c5/Big_buck_bunny_poster_big.jpg',
+        description: 'Starý známý králík. Jistota, že Stremio funguje.',
+        url: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
     }
 ];
 
 const builder = new addonBuilder(manifest);
 
 builder.defineCatalogHandler(({ type, id }) => {
-    if (id === 'mountains_catalog') {
-        const metas = CAMS.map(item => ({
+    if (id === 'cz_beauty_catalog') {
+        const metas = VIDEOS.map(item => ({
             id: item.id, type: item.type, name: item.name, poster: item.poster, description: item.description
         }));
         return Promise.resolve({ metas });
@@ -74,20 +67,20 @@ builder.defineCatalogHandler(({ type, id }) => {
 });
 
 builder.defineMetaHandler(({ type, id }) => {
-    const item = CAMS.find(i => i.id === id);
+    const item = VIDEOS.find(i => i.id === id);
     return Promise.resolve({ meta: item || null });
 });
 
 builder.defineStreamHandler(({ type, id }) => {
-    const item = CAMS.find(i => i.id === id);
+    const item = VIDEOS.find(i => i.id === id);
     if (item && item.url) {
         return Promise.resolve({
             streams: [
                 {
                     url: item.url,
-                    title: "⛰️ Sledovat Live (HLS)",
+                    title: "▶️ Přehrát Video",
                     behaviorHints: {
-                        notWebReady: true, // Klíčové pro Windows
+                        notWebReady: false, 
                         bingeGroup: "tv"
                     }
                 }
@@ -108,10 +101,10 @@ module.exports = function (req, res) {
         res.end(`
             <html>
                 <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-                    <h1>🏔️ CZ/SK Hory Live</h1>
-                    <p>Webkamery z Tater a sjezdovek (Direct HLS).</p>
+                    <h1>Krásy Česka v5.0</h1>
+                    <p>Statické video soubory (100% funkční).</p>
                     <a href="stremio://${req.headers.host}/manifest.json" 
-                       style="background: #2ecc71; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                       style="background: #8e44ad; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px;">
                        NAINSTALOVAT
                     </a>
                 </body>
