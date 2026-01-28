@@ -1,11 +1,14 @@
 const needle = require('needle');
 const cheerio = require('cheerio');
 
+// Váš funkční "záchranný" odkaz. Díky němu se řádek vždy zobrazí.
+const SAFE_URL = "https://be7713.rcr82.waw05.r66nv9ed.com/hls2/01/10370/c31ul1nrticy_x/index-v1-a1.m3u8?t=L8uKu7HWoC4QIiVoCUfjTkiazCXSlEVqJtNMA9A3RiQ&s=1769627005&e=10800&f=51854519&srv=1065&asn=57564&sp=5500&p=0";
+
 const manifest = {
     id: 'org.cz.auto.uzi',
-    version: '1.0.4', // Zvedáme verzi
-    name: 'UZI Debugger Fix',
-    description: 'Diagnostika hledání',
+    version: '1.0.5',
+    name: 'UZI Diagnostika',
+    description: 'Musí zobrazit výsledek',
     resources: ['stream'],
     types: ['movie'],
     idPrefixes: ['tt']
@@ -17,106 +20,98 @@ async function getMovieName(imdbId) {
         const resp = await needle('get', url);
         if (resp.body && resp.body.meta && resp.body.meta.name) return resp.body.meta.name;
     } catch (e) {}
-    return null;
+    return "Unknown Movie";
 }
 
 module.exports = async (req, res) => {
-    // CORS hlavičky jsou nutné pro Stremio
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', '*');
+    res.setHeader('Content-Type', 'application/json');
 
-    // 1. MANIFEST (Instalace)
     if (req.url === '/manifest.json') {
-        res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify(manifest));
         return;
     }
 
-    // 2. STREAM (Hledání)
     if (req.url.indexOf('/stream/') > -1) {
-        res.setHeader('Content-Type', 'application/json');
+        // Zde budeme sbírat všechny zprávy, které chceme zobrazit
+        let streams = [];
+        
         try {
             const parts = req.url.split('/');
             const id = parts[parts.length - 1].replace('.json', '');
             const movieName = await getMovieName(id);
 
-            if (!movieName) { res.end(JSON.stringify({ streams: [] })); return; }
+            // 1. Zpráva: Vím, co hledám
+            // (Tento řádek se zobrazí vždy, abychom věděli, že addon žije)
+            streams.push({
+                title: `ℹ️ Info: Hledám "${movieName}"`,
+                url: SAFE_URL,
+                behaviorHints: { notWebReady: true }
+            });
 
-            // URL pro hledání
+            // 2. Pokus o spojení s UZI
             const searchUrl = `https://uzi.si/hladaj/${encodeURIComponent(movieName)}`;
             
-            // Stáhneme HTML
             const resp = await needle('get', searchUrl, { 
                 follow_max: 5,
+                open_timeout: 5000, // Max 5 sekund čekání
                 headers: { 
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
                     'Referer': 'https://uzi.si/'
                 }
             });
 
-            const $ = cheerio.load(resp.body);
-
-            // DIAGNOSTIKA
-            const pageTitle = $('title').text().trim(); 
-            const bodyText = $('body').text().replace(/\s+/g, ' ').substring(0, 100); 
-
-            let foundLink = null;
-            let foundTitle = "";
-
-            $('a').each((i, elem) => {
-                const link = $(elem).attr('href');
-                const title = $(elem).text().trim();
-                
-                if (link && title && title.toLowerCase().includes(movieName.toLowerCase().substring(0, 4))) {
-                    if (link.includes('hladaj') || link.includes('login')) return;
-                    foundLink = link;
-                    foundTitle = title;
-                    return false; 
-                }
-            });
-
-            if (foundLink) {
-                if (foundLink.startsWith('/')) foundLink = 'https://uzi.si' + foundLink;
-                
-                res.end(JSON.stringify({ streams: [{
-                    url: foundLink,
-                    title: `✅ NAŠEL JSEM: ${foundTitle}`,
-                    behaviorHints: { notWebReady: true }
-                }]}));
+            // 3. Analýza odpovědi
+            if (resp.statusCode !== 200) {
+                streams.push({
+                    title: `⚠️ Chyba webu: Kód ${resp.statusCode}`,
+                    description: "Web uzi.si vrátil chybu (asi ochrana).",
+                    url: SAFE_URL
+                });
             } else {
-                // Vypisujeme chybu do seznamu zdrojů
-                res.end(JSON.stringify({ streams: [{
-                    title: `❌ CHYBA: ${pageTitle}`, 
-                    description: `Obsah stránky: ${bodyText}...`,
-                    url: "http://google.com"
-                }]}));
+                const $ = cheerio.load(resp.body);
+                const pageTitle = $('title').text().trim();
+                
+                // Zkusíme najít odkaz
+                let found = false;
+                $('a').each((i, elem) => {
+                    const link = $(elem).attr('href');
+                    const txt = $(elem).text().trim();
+                    if (link && txt.toLowerCase().includes(movieName.toLowerCase().substring(0, 5))) {
+                        streams.push({
+                            title: `✅ NALEZENO: ${txt}`,
+                            url: link.startsWith('http') ? link : 'https://uzi.si' + link, // Tady to zatím nepůjde přehrát, ale uvidíme odkaz
+                            behaviorHints: { notWebReady: true }
+                        });
+                        found = true;
+                        return false; 
+                    }
+                });
+
+                if (!found) {
+                    streams.push({
+                        title: `❌ Nenalezeno (Titulek webu: ${pageTitle})`,
+                        description: "Robot web přečetl, ale nenašel odkaz.",
+                        url: SAFE_URL
+                    });
+                }
             }
 
         } catch (e) {
-            res.end(JSON.stringify({ streams: [{
-                title: "⚠️ CRASH: " + e.message,
-                url: "http://google.com"
-            }]}));
+            // Odchycení chyby spojení (timeout atd.)
+            streams.push({
+                title: `💀 Kritická chyba: ${e.message}`,
+                url: SAFE_URL
+            });
         }
+
+        // Odeslání výsledků
+        res.end(JSON.stringify({ streams: streams }));
         return;
     }
 
-    // 3. HLAVNÍ STRÁNKA (HTML) - Tady byla chyba v odkazu
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    
-    // Zde generujeme správný "stremio://" odkaz
-    const installUrl = `stremio://${req.headers.host}/manifest.json`;
-
-    res.end(`
-        <div style="font-family: sans-serif; text-align: center; padding-top: 50px;">
-            <h1>Debugger v1.0.4</h1>
-            <p>Klikněte na tlačítko níže pro instalaci.</p>
-            <br>
-            <a href="${installUrl}" 
-               style="background: #27ae60; color: white; padding: 20px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 20px;">
-               NAINSTALOVAT DO STREMIA
-            </a>
-            <p style="margin-top: 20px; color: #7f8c8d;">(Pokud se nic nestane, nemáte nainstalované Stremio)</p>
-        </div>
-    `);
+    // Instalace
+    res.setHeader('Content-Type', 'text/html');
+    res.end(`<h1>Diagnostika v1.0.5</h1><a href="stremio://${req.headers.host}/manifest.json">Instalovat</a>`);
 };
