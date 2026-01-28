@@ -1,59 +1,117 @@
-// --- ZDE JE VÁŠ DLOUHÝ ODKAZ ---
-const URL_STREAM = "https://be7713.rcr82.waw05.r66nv9ed.com/hls2/01/10370/c31ul1nrticy_x/index-v1-a1.m3u8?t=L8uKu7HWoC4QIiVoCUfjTkiazCXSlEVqJtNMA9A3RiQ&s=1769627005&e=10800&f=51854519&srv=1065&asn=57564&sp=5500&p=0";
+const needle = require('needle');
+const cheerio = require('cheerio'); // Knihovna na čtení HTML
 
-module.exports = (req, res) => {
-    // 1. Nastavíme hlavičky (CORS), aby Stremio mohlo číst data
+const manifest = {
+    id: 'org.cz.auto.uzi',
+    version: '1.0.1',
+    name: 'UZI Auto-Search',
+    description: 'Automatické hledání na uzi.si',
+    resources: ['stream'],
+    types: ['movie'],
+    idPrefixes: ['tt']
+};
+
+// Pomocná funkce: Zjistit název filmu podle IMDb ID
+async function getMovieName(imdbId) {
+    const url = `https://v3-cinemeta.strem.io/meta/movie/${imdbId}.json`;
+    try {
+        const resp = await needle('get', url);
+        if (resp.body && resp.body.meta && resp.body.meta.name) {
+            return resp.body.meta.name;
+        }
+    } catch (e) { console.error(e); }
+    return null;
+}
+
+module.exports = async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', '*');
     res.setHeader('Content-Type', 'application/json');
 
-    // 2. Pokud se Stremio ptá na Manifest (Instalace)
     if (req.url === '/manifest.json') {
-        const manifest = {
-            id: "org.cz.manual.hls",
-            version: "1.0.0",
-            name: "VIP Linker (No-SDK)",
-            description: "Manuální stream bez závislostí",
-            resources: ["stream"],
-            types: ["movie", "series"],
-            idPrefixes: ["tt"],
-            catalogs: []
-        };
         res.end(JSON.stringify(manifest));
         return;
     }
 
-    // 3. Pokud se Stremio ptá na Stream
-    // Očekáváme URL ve stylu /stream/series/tt4574334:1:1.json
     if (req.url.indexOf('/stream/') > -1) {
-        
-        // Dekódujeme URL (pro jistotu, kdyby tam byly znaky jako %3A)
-        const currentUrl = decodeURIComponent(req.url);
+        const parts = req.url.split('/');
+        const id = parts[parts.length - 1].replace('.json', ''); 
 
-        // Hledáme ID pro Stranger Things S01E01
-        if (currentUrl.indexOf('tt4574334:1:1') > -1) {
-            const streamResponse = {
-                streams: [
-                    {
-                        url: URL_STREAM,
-                        title: "🚀 VIP Stream (Direct)",
-                        behaviorHints: {
-                            notWebReady: true,
-                            bingeGroup: "manual"
-                        }
-                    }
-                ]
-            };
-            res.end(JSON.stringify(streamResponse));
+        // 1. Získáme název (např. "Matrix")
+        const movieName = await getMovieName(id);
+        if (!movieName) { res.end(JSON.stringify({ streams: [] })); return; }
+
+        console.log(`Hledám: ${movieName}`);
+
+        try {
+            // 2. Jdeme hledat na UZI.si
+            const searchUrl = `https://uzi.si/hladaj/${encodeURIComponent(movieName)}`;
+            
+            // Stáhneme HTML stránky s výsledky
+            const resp = await needle('get', searchUrl, { follow_max: 5 });
+            const $ = cheerio.load(resp.body);
+
+            // 3. HLEDÁNÍ ODKAZU V HTML (TOTO JE KRITICKÁ ČÁST)
+            // Musíme najít první odkaz <a>, který vypadá jako výsledek filmu.
+            // Zkouším obecný odhad: Hledáme odkaz, který obsahuje v URL slovo 'film' nebo 'video'
+            // NEBO: Hledáme první odkaz v nějakém seznamu.
+            
+            // TIP PRO VÁS: Zde musíme trefit "CSS Selektor".
+            // Zkouším najít jakýkoliv odkaz, který má v atributu 'href' něco smysluplného.
+            
+            let foundLink = null;
+            let foundTitle = "";
+
+            // Procházíme všechny odkazy na stránce
+            $('a').each((i, elem) => {
+                const link = $(elem).attr('href');
+                const title = $(elem).text().trim();
+
+                // Jednoduchá logika: Pokud text odkazu obsahuje název filmu (Matrix)
+                // a odkaz není prázdný, asi jsme to našli.
+                if (link && title.toLowerCase().includes(movieName.toLowerCase())) {
+                    // Ignorujeme odkazy na 'hladaj' nebo 'login'
+                    if (link.includes('hladaj') || link.includes('login')) return;
+                    
+                    foundLink = link;
+                    foundTitle = title;
+                    return false; // Stop hledání po prvním nálezu
+                }
+            });
+
+            if (foundLink) {
+                // Pokud je odkaz relativní (např. /film/matrix), přidáme doménu
+                if (!foundLink.startsWith('http')) {
+                    foundLink = 'https://uzi.si' + foundLink;
+                }
+
+                // 4. Vrátíme výsledek
+                // POZOR: Zatím vracíme odkaz na STRÁNKU, ne na VIDEO.
+                // Stremio to nepřehraje (ukáže chybu), ale uvidíte titulek "Nalezeno!"
+                const streams = [{
+                    url: foundLink, 
+                    title: `✅ Nalezeno: ${foundTitle}`,
+                    description: "Kliknutím otevřete (zatím jen web)",
+                    behaviorHints: { notWebReady: true }
+                }];
+                
+                res.end(JSON.stringify({ streams: streams }));
+                return;
+            } else {
+                // Nic jsme nenašli
+                 res.end(JSON.stringify({ streams: [{
+                    title: "❌ Nenalezeno na UZI",
+                    url: "http://google.com" // Falešný link
+                }] }));
+                return;
+            }
+
+        } catch (e) {
+            console.error("Chyba scrapingu:", e);
+            res.end(JSON.stringify({ streams: [] }));
             return;
         }
-
-        // Pokud je to jiný film, vrátíme prázdno
-        res.end(JSON.stringify({ streams: [] }));
-        return;
     }
 
-    // 4. Hlavní stránka (pro prohlížeč)
-    res.setHeader('Content-Type', 'text/html');
-    res.end(`<h1>Addon bezi (Bez SDK)</h1><a href="stremio://${req.headers.host}/manifest.json">NAINSTALOVAT</a>`);
+    res.end('Addon bezi');
 };
