@@ -1,8 +1,11 @@
 {
-  "name": "cz-hokejka-tv",
+  "name": "cz-render-scanner",
   "version": "1.0.0",
-  "description": "Hokejka TV pro Stremio",
+  "description": "Scanner pro Render.com",
   "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
   "dependencies": {
     "stremio-addon-sdk": "^1.6.10",
     "needle": "^3.2.0",

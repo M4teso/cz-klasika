@@ -1,183 +1,106 @@
-const { addonBuilder } = require('stremio-addon-sdk');
+const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
 const needle = require('needle');
 const cheerio = require('cheerio');
 
 const manifest = {
-    id: 'org.cz.hokejka.final',
-    version: '1.0.6', // Zvedám verzi
-    name: 'CZ Hokejka',
-    description: 'Videa z Hokej.cz',
-    // DŮLEŽITÉ: Vrátil jsem 'meta' do resources
-    resources: ['catalog', 'meta', 'stream'], 
-    types: ['other'], 
-    catalogs: [
-        {
-            type: 'other',
-            id: 'hokej_catalog',
-            name: '🏒 CZ Hokej',
-            extra: [{ name: 'search', isRequired: false }]
-        }
-    ],
-    idPrefixes: ['hokej_']
+    id: 'org.cz.render.scanner',
+    version: '1.0.0',
+    name: 'Render EU Scanner',
+    description: 'Testuje dostupnost CZ webů z Frankfurtu',
+    resources: ['stream'],
+    types: ['movie'],
+    idPrefixes: ['tt']
 };
 
 const builder = new addonBuilder(manifest);
 
-// Hlavičky, abychom vypadali jako běžný prohlížeč (Chrome)
-const HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    'Referer': 'https://hokej.cz/'
-};
+// Záchranný link (Stranger Things), aby byl řádek vždy vidět
+const SAFE_URL = "https://be7713.rcr82.waw05.r66nv9ed.com/hls2/01/10370/c31ul1nrticy_x/index-v1-a1.m3u8?t=L8uKu7HWoC4QIiVoCUfjTkiazCXSlEVqJtNMA9A3RiQ&s=1769627005&e=10800&f=51854519&srv=1065&asn=57564&sp=5500&p=0";
 
-// 1. KATALOG (Seznam videí)
-builder.defineCatalogHandler(async ({ type, id }) => {
-    console.log("Stahuji seznam videí...");
-    
-    try {
-        const resp = await needle('get', 'https://www.hokej.cz/tv/hokejka', {
-            headers: HEADERS,
-            open_timeout: 6000, // 6 sekund timeout
-            follow_max: 2
-        });
-        
-        const $ = cheerio.load(resp.body);
-        let metas = [];
+// CÍLE K TESTOVÁNÍ
+const SITES = [
+    { name: '🏒 Hokej.cz (Ofiko)', url: 'https://www.hokej.cz/tv/hokejka' },
+    { name: '▶️ Prehraj.to', url: 'https://prehraj.to/' },
+    { name: '💣 Bombuj.si', url: 'https://bombuj.si/' },
+    { name: '📺 SledujSerialy', url: 'https://sledujserialy.io/' },
+    { name: '🟢 Archive.org (Kontrola)', url: 'https://archive.org/' }
+];
 
-        $('a').each((i, elem) => {
-            const link = $(elem).attr('href');
-            // Zkusíme najít obrázek různými způsoby
-            const imgElem = $(elem).find('img');
-            const img = imgElem.attr('src') || imgElem.attr('data-src');
-            const title = $(elem).text().trim();
-
-            if (link && link.includes('/video/') && img && title.length > 3) {
-                const match = link.match(/\/video\/(\d+)/);
-                if (match) {
-                    const fullImg = img.startsWith('http') ? img : 'https://www.hokej.cz' + img;
-                    metas.push({
-                        id: `hokej_${match[1]}`,
-                        type: 'other',
-                        name: title.replace(/\s+/g, ' ').substring(0, 60), // Čistý název
-                        poster: fullImg,
-                        // Přidáme description rovnou do katalogu, vypadá to lépe
-                        description: "Sledovat na Hokejka TV" 
-                    });
-                }
-            }
-        });
-
-        // Filtr duplicit
-        const uniqueMetas = [...new Map(metas.map(item => [item['id'], item])).values()];
-
-        if (uniqueMetas.length === 0) {
-            // Pokud se nic nenačte, vrátíme chybovou položku
-            return { metas: [{
-                id: 'hokej_error',
-                type: 'other',
-                name: "⚠️ Načítání selhalo",
-                poster: "https://www.hokej.cz/images/logo.png",
-                description: "Web hokej.cz neodpověděl včas. Zkuste to za chvíli."
-            }]};
-        }
-
-        return { metas: uniqueMetas };
-
-    } catch (e) {
-        console.log("Chyba:", e.message);
-        return { metas: [{
-            id: 'hokej_error',
-            type: 'other',
-            name: "⚠️ Chyba spojení",
-            poster: "https://www.hokej.cz/images/logo.png",
-            description: e.message
-        }]};
-    }
-});
-
-// 2. META (Detail položky - TOTO OPRAVUJE TU CHYBU)
-builder.defineMetaHandler(async ({ type, id }) => {
-    
-    // Pokud uživatel klikl na chybovou hlášku
-    if (id === 'hokej_error') {
-        return { meta: {
-            id: id,
-            type: 'other',
-            name: "Chyba načítání",
-            description: "Server Vercel se nedokázal spojit s Hokej.cz. Zkuste restartovat Stremio nebo obnovit doplněk.",
-            poster: "https://www.hokej.cz/images/logo.png"
-        }};
-    }
-
-    // Normální video
-    return {
-        meta: {
-            id: id,
-            type: 'other',
-            name: "Hokej Video",
-            poster: "https://www.hokej.cz/images/logo.png",
-            description: "Načítám přehrávač...",
-            background: "https://www.hokej.cz/images/logo.png"
-        }
-    };
-});
-
-// 3. STREAM (Získání odkazu)
 builder.defineStreamHandler(async ({ type, id }) => {
-    if (id === 'hokej_error') return { streams: [] };
+    console.log("Spouštím skenování webů...");
+    let streams = [];
 
-    const realId = id.replace('hokej_', '');
-    const videoUrl = `https://www.hokej.cz/tv/hokejka/video/${realId}`;
-    
-    try {
-        const resp = await needle('get', videoUrl, { headers: HEADERS, follow_max: 2 });
-        const html = resp.body;
-        
-        // Hledáme .m3u8
-        const m3u8Match = html.match(/https?:\\?\/\\?\/[^"'\s<>]+\.m3u8/);
-        
-        if (m3u8Match) {
-            return {
-                streams: [{
-                    title: "🏒 Přehrát Stream (HLS)",
-                    url: m3u8Match[0].replace(/\\\//g, '/')
-                }]
-            };
-        }
-        
-        // Hledáme .mp4
-        const mp4Match = html.match(/https?:\\?\/\\?\/[^"'\s<>]+\.mp4/);
-        if (mp4Match) {
-            return {
-                streams: [{
-                    title: "🏒 Přehrát Video (MP4)",
-                    url: mp4Match[0].replace(/\\\//g, '/')
-                }]
-            };
-        }
+    // Paralelní test všech webů
+    const promises = SITES.map(async (site) => {
+        // Unikátní URL pro každý řádek
+        const rowUrl = `${SAFE_URL}&debug_site=${encodeURIComponent(site.name)}`;
 
-        // Fallback
-        return {
-            streams: [{
-                title: "🌐 Otevřít na webu",
-                url: videoUrl,
+        try {
+            const resp = await needle('get', site.url, {
+                open_timeout: 5000, // 5s timeout
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
+            });
+
+            // Zjistíme titulek stránky
+            let pageTitle = "Neznámý titul";
+            if (resp.body) {
+                const $ = cheerio.load(resp.body);
+                pageTitle = $('title').text().trim().substring(0, 50);
+            }
+
+            // ANALÝZA VÝSLEDKU
+            if (resp.statusCode >= 200 && resp.statusCode < 400) {
+                // Kód 200 - Server odpověděl. Ale je to Cloudflare?
+                if (pageTitle.includes('Just a moment') || pageTitle.includes('Attention Required')) {
+                    return {
+                        title: `⛔ BLOK (Cloudflare): ${site.name}`,
+                        description: "Render se přes ochranu nedostal.",
+                        url: rowUrl,
+                        behaviorHints: { notWebReady: true }
+                    };
+                }
+
+                return {
+                    title: `✅ OTEVŘENO: ${site.name}`,
+                    description: `Titulek: "${pageTitle}"`,
+                    url: rowUrl,
+                    behaviorHints: { notWebReady: true }
+                };
+
+            } else {
+                return {
+                    title: `⛔ BLOK (Kód ${resp.statusCode}): ${site.name}`,
+                    description: "Server odmítl spojení.",
+                    url: rowUrl,
+                    behaviorHints: { notWebReady: true }
+                };
+            }
+
+        } catch (e) {
+            return {
+                title: `💀 ERROR: ${site.name}`,
+                description: e.message,
+                url: rowUrl,
                 behaviorHints: { notWebReady: true }
-            }]
-        };
-    } catch (e) {
-        return { streams: [] };
-    }
+            };
+        }
+    });
+
+    const results = await Promise.all(promises);
+    
+    // Seřadíme: Zelené nahoru
+    results.sort((a, b) => {
+        if (a.title.includes('✅')) return -1;
+        if (b.title.includes('✅')) return 1;
+        return 0;
+    });
+
+    return { streams: results };
 });
 
-const getRouter = require('stremio-addon-sdk/src/getRouter');
-const addonInterface = builder.getInterface();
-const router = getRouter(addonInterface);
-
-module.exports = function (req, res) {
-    if (req.url === '/') {
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.end(`<h1>Hokejka v1.0.6</h1><a href="stremio://${req.headers.host}/manifest.json">INSTALOVAT</a>`);
-        return;
-    }
-    router(req, res, function () { res.statusCode = 404; res.end(); });
-};
+// Start serveru pro Render (používá process.env.PORT)
+const port = process.env.PORT || 7000;
+serveHTTP(builder.getInterface(), { port: port });
+console.log(`🚀 Scanner běží na portu ${port}`);
