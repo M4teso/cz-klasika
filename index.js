@@ -1,107 +1,127 @@
 const { addonBuilder } = require('stremio-addon-sdk');
 const getRouter = require('stremio-addon-sdk/src/getRouter');
 const http = require('http');
-const needle = require('needle');
-const cheerio = require('cheerio');
+
+// Import Puppeteer a Stealth pluginu
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+puppeteer.use(StealthPlugin());
 
 const manifest = {
-    id: 'org.cz.render.uzi.test',
-    version: '1.0.5',
-    name: 'UZI & Friends Scanner',
-    description: 'Poslední pokus o průlom',
+    id: 'org.cz.render.puppeteer',
+    version: '2.0.0',
+    name: 'CZ Browser Scanner',
+    description: 'Pokus o průlom pomocí Puppeteer',
     resources: ['stream'],
     types: ['movie'],
     idPrefixes: ['tt'],
-    catalogs: [] 
+    catalogs: []
 };
 
 const builder = new addonBuilder(manifest);
 
-// Záchranný odkaz
 const SAFE_URL = "https://be7713.rcr82.waw05.r66nv9ed.com/hls2/01/10370/c31ul1nrticy_x/index-v1-a1.m3u8?t=L8uKu7HWoC4QIiVoCUfjTkiazCXSlEVqJtNMA9A3RiQ&s=1769627005&e=10800&f=51854519&srv=1065&asn=57564&sp=5500&p=0";
 
+// Testujeme jen ty nejdůležitější, šetříme RAM
 const SITES = [
-    { name: '🔫 UZI.si', url: 'https://uzi.si/' }, // Hlavní cíl
-    { name: '🔫 UZI (Hledání)', url: 'https://uzi.si/hladaj/matrix' }, // Test hlubšího odkazu
-    { name: '💣 Bombuj.si', url: 'https://bombuj.si/' },
-    { name: '🎥 SledujTo (možná jiná ochrana)', url: 'https://sledujteto.cz/' },
-    { name: '📺 Kukaj.io', url: 'https://kukaj.io/' },
-    { name: '💾 Datoid (Filehosting)', url: 'https://datoid.cz/' },
-    { name: '🟢 Archive.org (Kontrola)', url: 'https://archive.org/' }
+    { name: '🔫 UZI.si (Hledání)', url: 'https://uzi.si/hladaj/matrix' },
+    { name: '▶️ Prehraj.to', url: 'https://prehraj.to/hledej/matrix' },
+    { name: '💣 Bombuj.si', url: 'https://bombuj.si' },
+    { name: '🟢 Google (Test)', url: 'https://www.google.com' }
 ];
 
 builder.defineStreamHandler(async ({ type, id }) => {
-    console.log("Spouštím UZI scan...");
-    
-    const promises = SITES.map(async (site) => {
-        const uniqueId = Math.floor(Math.random() * 1000000);
-        const rowUrl = `${SAFE_URL}&site=${encodeURIComponent(site.name)}&uid=${uniqueId}`;
+    console.log("🚀 Startuji virtuální prohlížeč...");
+    let streams = [];
+    let browser = null;
 
-        try {
-            const resp = await needle('get', site.url, {
-                open_timeout: 5000,
-                follow_max: 2,
-                headers: { 
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-                    'Referer': 'https://google.com'
-                }
-            });
+    try {
+        // Spuštění prohlížeče s nastavením pro Docker/Render (šetří paměť)
+        browser = await puppeteer.launch({
+            headless: 'new', // Nový headless režim
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage', // Důležité pro Render
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--single-process', 
+                '--disable-gpu'
+            ]
+        });
 
-            let pageTitle = "---";
-            if (resp.body) {
-                try {
-                    const $ = cheerio.load(resp.body);
-                    pageTitle = $('title').text().trim().substring(0, 40);
-                } catch (e) {}
-            }
+        // Otevřeme novou stránku
+        const page = await browser.newPage();
+        
+        // Nastavíme timeout na 30 sekund
+        page.setDefaultNavigationTimeout(30000);
 
-            if (resp.statusCode >= 200 && resp.statusCode < 400) {
-                // Cloudflare detekce
-                if (pageTitle.includes('Just a moment') || pageTitle.includes('Attention Required') || pageTitle.includes('Security Check')) {
-                    return {
-                        title: `⛔ CF BLOK: ${site.name}`,
-                        url: rowUrl,
-                        behaviorHints: { notWebReady: true }
-                    };
-                }
+        // Projdeme weby jeden po druhém (sériově, ne paralelně, aby nespadla RAM)
+        for (const site of SITES) {
+            const uniqueId = Math.floor(Math.random() * 1000);
+            const rowUrl = `${SAFE_URL}&site=${encodeURIComponent(site.name)}&uid=${uniqueId}`;
+
+            try {
+                console.log(`Navštěvuji: ${site.url}`);
                 
-                // UZI.si specifická detekce (Login wall)
-                if (pageTitle.includes('Login') || pageTitle.includes('Prihlásenie')) {
-                     return {
-                        title: `🔒 LOGIN WALL: ${site.name}`,
-                        description: "Web dostupný, ale vyžaduje přihlášení.",
+                // Jdeme na web
+                await page.goto(site.url, { waitUntil: 'domcontentloaded' });
+                
+                // ČEKÁME NA CLOUDFLARE (6 sekund)
+                // Během této doby by měl JS na stránce vyřešit hádanku a reloadnout se
+                await new Promise(r => setTimeout(r, 6000));
+
+                // Získáme titulek stránky po čekání
+                const pageTitle = await page.title();
+                const content = await page.content(); // HTML obsah
+
+                console.log(`Výsledek ${site.name}: ${pageTitle}`);
+
+                // Analýza
+                if (pageTitle.includes('Just a moment') || pageTitle.includes('Attention Required')) {
+                    streams.push({
+                        title: `⛔ STÁLE BLOK: ${site.name}`,
+                        description: "Cloudflare nás prokoukl i s prohlížečem.",
                         url: rowUrl,
                         behaviorHints: { notWebReady: true }
-                    };
+                    });
+                } else if (pageTitle.includes('503') || pageTitle.includes('403') || pageTitle.includes('Access denied')) {
+                     streams.push({
+                        title: `⛔ CHYBA ${pageTitle}: ${site.name}`,
+                        url: rowUrl,
+                        behaviorHints: { notWebReady: true }
+                    });
+                } else {
+                    // MÁME TO?!
+                    streams.push({
+                        title: `✅ OTEVŘENO: ${site.name}`,
+                        description: `Titulek: ${pageTitle}`,
+                        url: rowUrl,
+                        behaviorHints: { notWebReady: true }
+                    });
                 }
 
-                // ÚSPĚCH
-                return {
-                    title: `✅ OTEVŘENO: ${site.name}`,
-                    description: `Titulek: "${pageTitle}"`,
+            } catch (err) {
+                console.log(`Chyba u ${site.name}: ${err.message}`);
+                streams.push({
+                    title: `💀 CRASH: ${site.name}`,
+                    description: err.message,
                     url: rowUrl,
                     behaviorHints: { notWebReady: true }
-                };
-            } else {
-                return {
-                    title: `⛔ BLOK ${resp.statusCode}: ${site.name}`,
-                    url: rowUrl,
-                    behaviorHints: { notWebReady: true }
-                };
+                });
             }
-        } catch (e) {
-            return {
-                title: `💀 ERROR: ${site.name}`,
-                description: e.message,
-                url: rowUrl,
-                behaviorHints: { notWebReady: true }
-            };
         }
-    });
 
-    const results = await Promise.all(promises);
-    results.sort((a, b) => (a.title.includes('✅') ? -1 : 1));
-    return { streams: results };
+    } catch (e) {
+        console.error("Critical Browser Error:", e);
+        return { streams: [{ title: "💀 SELHAL START PROHLÍŽEČE", description: e.message, url: SAFE_URL }] };
+    } finally {
+        // Vždy zavřít prohlížeč, jinak dojde paměť
+        if (browser) await browser.close();
+    }
+
+    return { streams: streams };
 });
 
 const addonInterface = builder.getInterface();
@@ -109,7 +129,7 @@ const router = getRouter(addonInterface);
 const server = http.createServer((req, res) => {
     if (req.url === '/') {
         res.setHeader('Content-Type', 'text/html');
-        res.end('<h1>UZI Scanner</h1><a href="/manifest.json">Instalovat</a>');
+        res.end('<h1>Puppeteer Scanner</h1><a href="/manifest.json">Instalovat</a>');
         return;
     }
     router(req, res, () => { res.statusCode = 404; res.end(); });
@@ -117,5 +137,5 @@ const server = http.createServer((req, res) => {
 
 const port = process.env.PORT || 7000;
 server.listen(port, '0.0.0.0', () => {
-    console.log(`🚀 UZI Scanner běží na portu ${port}`);
+    console.log(`🚀 Puppeteer Server běží na portu ${port}`);
 });
